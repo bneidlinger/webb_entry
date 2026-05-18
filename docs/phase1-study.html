@@ -1,0 +1,1374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>WEBBWATCH//AI :: PHASE 01 BRIEFING</title>
+<style>
+  :root {
+    --bg: #050807;
+    --phosphor: #33ff66;
+    --phosphor-dim: #1a8a37;
+    --amber: #ffb000;
+    --amber-dim: #8a5f00;
+    --cyan: #66ffff;
+    --white: #d9ffd9;
+    --red: #ff4444;
+    --grey: #5a7058;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--phosphor);
+    font-family: "JetBrains Mono", "Cascadia Mono", "Consolas", "Courier New", monospace;
+    font-size: 14px;
+    line-height: 1.55;
+    text-shadow:
+      0 0 1px rgba(51, 255, 102, 0.5),
+      0 0 4px rgba(51, 255, 102, 0.25);
+  }
+  body::before {
+    /* CRT scanline overlay */
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0) 0px,
+      rgba(0, 0, 0, 0) 2px,
+      rgba(0, 0, 0, 0.25) 3px,
+      rgba(0, 0, 0, 0) 4px
+    );
+    pointer-events: none;
+    z-index: 1000;
+  }
+  body::after {
+    /* Vignette / CRT curve hint */
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%);
+    pointer-events: none;
+    z-index: 999;
+  }
+  main {
+    max-width: 100ch;
+    margin: 0 auto;
+    padding: 3rem 2rem 6rem;
+    position: relative;
+    z-index: 1;
+  }
+  pre, code { font-family: inherit; }
+  pre {
+    margin: 0;
+    white-space: pre;
+    overflow-x: auto;
+  }
+  pre.ascii {
+    color: var(--phosphor);
+    line-height: 1.05;
+    font-size: 13px;
+  }
+  pre.code {
+    background: #0a0d0a;
+    border: 1px solid var(--phosphor-dim);
+    padding: 0.75rem 1rem;
+    margin: 0.75rem 0 1rem;
+    color: var(--white);
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  pre.code .com { color: var(--grey); font-style: italic; }
+  pre.code .kw  { color: var(--amber); }
+  pre.code .str { color: var(--cyan); }
+  pre.code .fn  { color: var(--phosphor); }
+  pre.code .num { color: var(--amber); }
+  pre.code .ok  { color: var(--phosphor); }
+  pre.code .err { color: var(--red); }
+  pre.code .prompt { color: var(--amber); }
+
+  h1, h2, h3, h4 { font-weight: normal; }
+  h1 { color: var(--amber); font-size: 16px; letter-spacing: 0.2em; margin: 2rem 0 1rem; }
+  h2 {
+    color: var(--amber);
+    font-size: 15px;
+    border-top: 1px dashed var(--phosphor-dim);
+    padding-top: 1.5rem;
+    margin-top: 3rem;
+    margin-bottom: 0.5rem;
+  }
+  h3 { color: var(--cyan); font-size: 14px; margin: 1.5rem 0 0.5rem; }
+  h4 { color: var(--phosphor); font-size: 14px; margin: 1.25rem 0 0.25rem; }
+
+  p { margin: 0.5rem 0 1rem; }
+  ul { padding-left: 1.5rem; }
+  li { margin: 0.25rem 0; }
+
+  .ok    { color: var(--phosphor); }
+  .warn  { color: var(--amber); }
+  .fail  { color: var(--red); }
+  .dim   { color: var(--grey); }
+  .hi    { color: var(--cyan); }
+  .glow  { color: var(--white); text-shadow: 0 0 6px rgba(217,255,217,0.8); }
+
+  .boot-line { display: block; opacity: 0; animation: boot 0.4s steps(1) forwards; }
+  @keyframes boot { to { opacity: 1; } }
+  .boot-line:nth-child(1)  { animation-delay: 0.0s; }
+  .boot-line:nth-child(2)  { animation-delay: 0.1s; }
+  .boot-line:nth-child(3)  { animation-delay: 0.2s; }
+  .boot-line:nth-child(4)  { animation-delay: 0.3s; }
+  .boot-line:nth-child(5)  { animation-delay: 0.4s; }
+  .boot-line:nth-child(6)  { animation-delay: 0.5s; }
+  .boot-line:nth-child(7)  { animation-delay: 0.6s; }
+  .boot-line:nth-child(8)  { animation-delay: 0.7s; }
+  .boot-line:nth-child(9)  { animation-delay: 0.8s; }
+  .boot-line:nth-child(10) { animation-delay: 0.9s; }
+  .boot-line:nth-child(11) { animation-delay: 1.0s; }
+  .boot-line:nth-child(12) { animation-delay: 1.1s; }
+
+  .cursor {
+    display: inline-block;
+    width: 0.6em;
+    height: 1em;
+    vertical-align: text-bottom;
+    background: var(--phosphor);
+    animation: blink 1.06s steps(1) infinite;
+    box-shadow: 0 0 6px var(--phosphor);
+  }
+  @keyframes blink {
+    50% { opacity: 0; }
+  }
+
+  .toc-grid {
+    display: grid;
+    grid-template-columns: 4ch 1fr 8ch;
+    gap: 0.25rem 1rem;
+    border: 1px solid var(--phosphor-dim);
+    padding: 1rem 1.25rem;
+    margin: 1.5rem 0;
+    background: #060906;
+  }
+  .toc-grid a { color: var(--phosphor); text-decoration: none; }
+  .toc-grid a:hover { color: var(--white); background: rgba(51,255,102,0.08); }
+  .toc-grid .id { color: var(--amber); }
+  .toc-grid .status { color: var(--phosphor); text-align: right; }
+
+  .callout {
+    border-left: 2px solid var(--amber);
+    background: rgba(255, 176, 0, 0.04);
+    padding: 0.5rem 1rem;
+    margin: 1rem 0;
+  }
+  .callout .label { color: var(--amber); }
+
+  .stat {
+    display: inline-block;
+    border: 1px solid var(--phosphor-dim);
+    padding: 0 0.5rem;
+    margin: 0 0.25rem;
+    color: var(--white);
+  }
+
+  table.dataflow {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+  }
+  table.dataflow td {
+    border: 1px solid var(--phosphor-dim);
+    padding: 0.4rem 0.6rem;
+    vertical-align: top;
+  }
+  table.dataflow td:first-child { color: var(--amber); width: 16ch; }
+  table.dataflow td:last-child { color: var(--white); }
+
+  hr {
+    border: none;
+    border-top: 1px dashed var(--phosphor-dim);
+    margin: 2rem 0;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 0 0.4rem;
+    border: 1px solid var(--phosphor-dim);
+    color: var(--phosphor);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin: 0 0.2rem;
+  }
+  .badge.amber { color: var(--amber); border-color: var(--amber-dim); }
+  .badge.red   { color: var(--red);   border-color: #882222; }
+  .badge.cyan  { color: var(--cyan);  border-color: #226666; }
+
+  ::selection { background: var(--phosphor); color: var(--bg); }
+</style>
+</head>
+<body>
+<main>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- BOOT SEQUENCE                                                -->
+<!-- ════════════════════════════════════════════════════════════ -->
+
+<pre class="ascii"><span class="dim">webbwatch sys_v1 :: COLD BOOT @ </span><span class="hi">2026-05-17T22:00:00Z</span><span class="dim">
+══════════════════════════════════════════════════════════════════════</span>
+<span class="boot-line">[<span class="ok">  OK  </span>] mounting filesystem ......................... </span><span class="boot-line">[<span class="ok">  OK  </span>] loading webbwatch.config ..................... </span><span class="boot-line">[<span class="ok">  OK  </span>] linking ./services/api ....................... </span><span class="boot-line">[<span class="ok">  OK  </span>] linking ./apps/web ........................... </span><span class="boot-line">[<span class="ok">  OK  </span>] initializing sqlalchemy-2.0.x ................ </span><span class="boot-line">[<span class="ok">  OK  </span>] resolving astroquery.mast .................... </span><span class="boot-line">[<span class="ok">  OK  </span>] connecting to MAST archive (stsci.edu) ....... </span><span class="boot-line">[<span class="ok">  OK  </span>] handshake complete ........................... </span><span class="boot-line">[<span class="warn"> WARN </span>] docker daemon: not present ................... </span><span class="boot-line">[<span class="ok">  OK  </span>] fallback: sqlite+pysqlite:///./webbwatch.db .. </span><span class="boot-line">[<span class="ok">  OK  </span>] launching study session ...................... </span><span class="boot-line"><span class="dim">══════════════════════════════════════════════════════════════════════</span></span></pre>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- LOGO                                                         -->
+<!-- ════════════════════════════════════════════════════════════ -->
+
+<pre class="ascii" style="color: var(--amber); margin-top: 1rem;">
+██╗    ██╗███████╗██████╗ ██████╗ ██╗    ██╗ █████╗ ████████╗ ██████╗██╗  ██╗
+██║    ██║██╔════╝██╔══██╗██╔══██╗██║    ██║██╔══██╗╚══██╔══╝██╔════╝██║  ██║
+██║ █╗ ██║█████╗  ██████╔╝██████╔╝██║ █╗ ██║███████║   ██║   ██║     ███████║
+██║███╗██║██╔══╝  ██╔══██╗██╔══██╗██║███╗██║██╔══██║   ██║   ██║     ██╔══██║
+╚███╔███╔╝███████╗██████╔╝██████╔╝╚███╔███╔╝██║  ██║   ██║   ╚██████╗██║  ██║
+ ╚══╝╚══╝ ╚══════╝╚═════╝ ╚═════╝  ╚══╝╚══╝ ╚═╝  ╚═╝   ╚═╝    ╚═════╝╚═╝  ╚═╝
+                  /// A R T I F I C I A L   I N T E L L I G E N C E ///
+</pre>
+
+<pre class="ascii" style="color: var(--phosphor-dim);">
+                ::  PHASE 01 :: MAST METADATA INGESTION  ::
+                ::  classification : TECHNICAL STUDY DOC ::
+                ::  intended for   : nightshift study    ::
+                ::  est. read time : 35-50 minutes       ::
+</pre>
+
+<p><span class="prompt">brandon@webbwatch:~$</span> cat phase01_debrief.txt<span class="cursor"></span></p>
+
+<hr>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- TABLE OF CONTENTS                                            -->
+<!-- ════════════════════════════════════════════════════════════ -->
+
+<h1>┌─ TABLE OF CONTENTS ─────────────────────────────────────────┐</h1>
+
+<div class="toc-grid">
+  <span class="id">01</span><a href="#s01">MISSION CONTEXT  ::  what webbwatch even is</a><span class="status">PRIMER</span>
+  <span class="id">02</span><a href="#s02">THE PHASE 0 → 1 HANDOFF  ::  from skeleton to skin</a><span class="status">PRIMER</span>
+  <span class="id">03</span><a href="#s03">DATABASE LAYER  ::  sqlalchemy + alembic, deeply</a><span class="status">CORE</span>
+  <span class="id">04</span><a href="#s04">THE MAST CLIENT  ::  taming astroquery</a><span class="status">CORE</span>
+  <span class="id">05</span><a href="#s05">INGEST SERVICE  ::  idempotency as a discipline</a><span class="status">CORE</span>
+  <span class="id">06</span><a href="#s06">CLI  ::  python -m app and why it matters</a><span class="status">CORE</span>
+  <span class="id">07</span><a href="#s07">API LAYER  ::  FastAPI, Pydantic v2, pagination</a><span class="status">CORE</span>
+  <span class="id">08</span><a href="#s08">FRONTEND  ::  Server Components, ISR, no JS fetch</a><span class="status">CORE</span>
+  <span class="id">09</span><a href="#s09">END-TO-END DATA FLOW  ::  request to render</a><span class="status">MAP</span>
+  <span class="id">10</span><a href="#s10">DECISIONS LOG  ::  the choices behind the code</a><span class="status">META</span>
+  <span class="id">11</span><a href="#s11">GOTCHAS  ::  bugs and surprises we cleared</a><span class="status">META</span>
+  <span class="id">12</span><a href="#s12">THE GRAND ARC  ::  where phase 1 sits</a><span class="status">META</span>
+  <span class="id">13</span><a href="#s13">PHASE 2 PREVIEW  ::  what we wire next</a><span class="status">AHEAD</span>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- 01 :: MISSION CONTEXT                                        -->
+<!-- ════════════════════════════════════════════════════════════ -->
+
+<h2 id="s01">[ 01 ] MISSION CONTEXT // what webbwatch even is</h2>
+
+<p>
+  Every few hours, a new image or spectrum from the
+  <span class="hi">James Webb Space Telescope</span> becomes public on the
+  <span class="hi">Mikulski Archive for Space Telescopes (MAST)</span>. Most of it
+  is technical data with cryptic filenames (<span class="dim">jw01193-c1034_t001_nircam_f444w-maskrnd-sub320a430r_psfstack.fits</span>)
+  buried behind a search portal designed for working astronomers. It is a
+  treasure house with no signage.
+</p>
+
+<p>
+  <span class="glow">WebbWatch AI</span> exists to make that treasure house
+  feel like a live feed:
+</p>
+
+<pre class="ascii">
+  ┌────────────────────────────────────────────────────────────────┐
+  │  "new Webb data just dropped"                                  │
+  │  "here is what instrument / filter / product type it is"       │
+  │  "here is a preview image or spectrum"                         │
+  │  "here is a first-pass AI + science-tool analysis"             │
+  │  "here is why it might be interesting"                         │
+  │  "here is the exact file, source archive, citation path"       │
+  └────────────────────────────────────────────────────────────────┘
+</pre>
+
+<p>
+  The plan is staged across <span class="amber">eight phases</span>
+  (see <a href="../webbwatch_ai_project_plan.md" style="color: var(--cyan);">webbwatch_ai_project_plan.md</a>).
+  Phase 0 stood up the skeleton. Phase 1 is what we just finished:
+  <span class="glow">the first real JWST data flowing in from MAST, into our
+  database, out through our API, and onto a webpage</span>. Everything
+  else — previews, deterministic analysis, local AI, cloud AI, alerts,
+  social feed — sits on top of this layer.
+</p>
+
+<div class="callout">
+  <span class="label">[ PRINCIPLE ]</span>
+  <span class="hi">Deterministic tools first. AI second.</span> The plan
+  is explicit: AI never touches a file before boring, reproducible code
+  has measured it. AI commentary is meaningless if the underlying
+  pipeline is hallucinating filenames.
+</div>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- 02 :: PHASE 0 → 1 HANDOFF                                    -->
+<!-- ════════════════════════════════════════════════════════════ -->
+
+<h2 id="s02">[ 02 ] THE PHASE 0 → 1 HANDOFF // skeleton to skin</h2>
+
+<p>
+  Phase 0 left us with a working <span class="hi">dial tone</span>:
+</p>
+
+<ul>
+  <li>Monorepo: <span class="amber">apps/web</span>, <span class="amber">services/api</span>, <span class="amber">services/worker</span>, <span class="amber">packages/shared</span>, <span class="amber">infra/</span>, <span class="amber">docs/</span>.</li>
+  <li>Next.js 15 frontend that pings <span class="amber">/health</span> and shows an "API OK" badge.</li>
+  <li>FastAPI service with the <span class="amber">/health</span> route and a CORS config that lets the frontend talk to it.</li>
+  <li>RQ worker skeleton (process boots, attaches to Redis, listens on three queues — but no jobs registered yet).</li>
+  <li>Azurite + Postgres + Redis declared in <span class="amber">docker-compose.yml</span> (idle until Docker Desktop is installed).</li>
+  <li>A <span class="amber">CloudAIProvider</span> Protocol with two adapters (OpenAI + Azure OpenAI) and a factory that switches on <span class="amber">AI_PROVIDER</span>.</li>
+  <li>GitHub Actions CI: ruff + pytest + npm typecheck + next build.</li>
+</ul>
+
+<p>
+  But there was <span class="warn">no actual data</span>. The home page
+  said "no products yet, run the CLI." There was no DB. There was no
+  CLI. The api had exactly one endpoint and it returned the current
+  time.
+</p>
+
+<p>
+  Phase 1 is the moment WebbWatch stops being a coathanger and starts
+  having a torso. The deliverable from the plan:
+</p>
+
+<pre class="ascii" style="color: var(--cyan);">
+  ┌──────────────────────────────────────────────────────────┐
+  │  Deliverable: App displays real JWST observations /      │
+  │  products from MAST.                                     │
+  └──────────────────────────────────────────────────────────┘
+</pre>
+
+<p>Five things we had to build for that one sentence to be true:</p>
+
+<ol>
+  <li>A <span class="hi">database</span> with a schema for observations and products.</li>
+  <li>A <span class="hi">MAST client</span> that can query the archive and return clean data.</li>
+  <li>An <span class="hi">ingest service</span> that loads data into the database without creating duplicates.</li>
+  <li>A <span class="hi">CLI</span> to run the ingest by hand.</li>
+  <li>An <span class="hi">API + frontend page</span> that surface what got ingested.</li>
+</ol>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- 03 :: DATABASE LAYER                                         -->
+<!-- ════════════════════════════════════════════════════════════ -->
+
+<h2 id="s03">[ 03 ] DATABASE LAYER // sqlalchemy + alembic, deeply</h2>
+
+<h3>// why a database at all?</h3>
+
+<p>
+  We could have made the frontend hit MAST directly on every page load.
+  We did not. Four reasons:
+</p>
+
+<ul>
+  <li><span class="amber">Speed</span>: MAST queries take 30-90 seconds. Nobody waits 60 seconds for a webpage.</li>
+  <li><span class="amber">Search</span>: MAST's query API is rigid. SQL lets us slice by anything we choose to index.</li>
+  <li><span class="amber">Dedup &amp; change detection</span>: To say "this product is new" or "this got reprocessed" we have to remember what we saw last time.</li>
+  <li><span class="amber">Time series</span>: Phase 7's "newly public" feed needs <span class="amber">first_seen_at</span> on every row. You only get that by writing it down.</li>
+</ul>
+
+<h3>// the models, in detail</h3>
+
+<p>
+  Two tables. Plan §8 lists ~10 future tables, but Phase 1 only needs
+  these two:
+</p>
+
+<pre class="code"><span class="com"># services/api/app/models/observation.py</span>
+<span class="kw">class</span> <span class="fn">Observation</span>(Base, TimestampMixin):
+    __tablename__ = <span class="str">"observations"</span>
+    __table_args__ = (UniqueConstraint(<span class="str">"mast_obs_id"</span>, name=<span class="str">"uq_observations_mast_obs_id"</span>),)
+
+    id: Mapped[<span class="kw">int</span>] = mapped_column(primary_key=<span class="kw">True</span>)
+    mast_obs_id: Mapped[<span class="kw">str</span>] = mapped_column(String(<span class="num">64</span>), index=<span class="kw">True</span>, nullable=<span class="kw">False</span>)
+
+    program_id:           Mapped[<span class="kw">str</span> | <span class="kw">None</span>] = mapped_column(String(<span class="num">32</span>),  index=<span class="kw">True</span>)
+    target_name:          Mapped[<span class="kw">str</span> | <span class="kw">None</span>] = mapped_column(String(<span class="num">256</span>), index=<span class="kw">True</span>)
+    instrument:           Mapped[<span class="kw">str</span> | <span class="kw">None</span>] = mapped_column(String(<span class="num">64</span>),  index=<span class="kw">True</span>)
+    filters:              Mapped[<span class="kw">str</span> | <span class="kw">None</span>] = mapped_column(String(<span class="num">256</span>))
+    ra:                   Mapped[<span class="kw">float</span> | <span class="kw">None</span>] = mapped_column(Float)
+    dec:                  Mapped[<span class="kw">float</span> | <span class="kw">None</span>] = mapped_column(Float)
+    observation_date:     Mapped[datetime | <span class="kw">None</span>] = mapped_column(DateTime(timezone=<span class="kw">True</span>))
+    public_release_date:  Mapped[datetime | <span class="kw">None</span>] = mapped_column(DateTime(timezone=<span class="kw">True</span>))
+
+    data_products: Mapped[<span class="kw">list</span>[DataProduct]] = relationship(...)
+</pre>
+
+<p>
+  This is <span class="hi">SQLAlchemy 2.0 typed declarative</span> syntax.
+  Worth knowing what each piece is:
+</p>
+
+<ul>
+  <li><span class="amber">Mapped[X]</span> — a type hint that tells SQLAlchemy "this attribute is a column of type X." At runtime, instances of <span class="amber">Observation</span> have actual values; at type-check time, your IDE knows <span class="amber">obs.ra</span> is <span class="amber">float | None</span>.</li>
+  <li><span class="amber">mapped_column(...)</span> — the actual column descriptor. Replaces the older <span class="dim">Column()</span> from SQLAlchemy 1.x.</li>
+  <li><span class="amber">UniqueConstraint("mast_obs_id")</span> — this is the <span class="hi">dedup contract</span> at the database level. If two ingest runs race and both try to insert the same MAST observation, the database will reject one. We do NOT rely solely on application code to prevent dupes.</li>
+  <li><span class="amber">index=True</span> — for fields we'll filter on (instrument, program_id, target_name) so the WHERE clauses don't full-table-scan.</li>
+  <li><span class="amber">relationship(...)</span> — sets up the parent→children link so <span class="amber">obs.data_products</span> works in Python without us writing JOINs by hand.</li>
+</ul>
+
+<p>
+  <span class="amber">DataProduct</span> is the mirror table with a unique
+  constraint on <span class="amber">(observation_id, filename)</span> —
+  one row per file, no matter how many times MAST hands the same file
+  back to us under different URIs.
+</p>
+
+<h3>// alembic: migrations are not optional</h3>
+
+<p>
+  A migration is a file that records <span class="hi">a change to the
+  schema</span>. Not a script that recreates the schema from scratch — a
+  diff: "add column X," "rename table Y," "drop index Z." Migrations are
+  the closest thing to <span class="hi">git for databases</span>.
+</p>
+
+<p>Two reasons to use them from day one, not "later":</p>
+
+<ul>
+  <li><span class="amber">Two environments diverge instantly.</span> Local dev is on SQLite. Prod will be on Azure Postgres. Without migrations, you can't reproducibly evolve both.</li>
+  <li><span class="amber">A migration in git is a record of intent.</span> Code review the schema change at the same time as the code that needs it.</li>
+</ul>
+
+<p>The flow:</p>
+
+<pre class="code"><span class="prompt">$</span> python -m alembic revision --autogenerate -m <span class="str">"create observations and data_products"</span>
+<span class="dim">INFO  [alembic.autogenerate.compare.tables] Detected added table 'observations'</span>
+<span class="dim">INFO  [alembic.autogenerate.compare.tables] Detected added table 'data_products'</span>
+<span class="dim">Generating alembic/versions/0f6caa2f9bf7_create_observations_and_data_products.py</span>
+
+<span class="prompt">$</span> python -m alembic upgrade head
+<span class="ok">INFO  [alembic.runtime.migration] Running upgrade  -> 0f6caa2f9bf7</span>
+</pre>
+
+<p>
+  <span class="hi">Autogenerate</span> compares the live database
+  against your ORM models and writes the migration for you. It is
+  smart but not infallible — always read the generated file before
+  committing it. Alembic misses things like CHECK constraints, server
+  defaults, and column reorderings.
+</p>
+
+<p>Our <span class="amber">alembic/env.py</span> does one important non-default thing:</p>
+
+<pre class="code"><span class="com"># Inject the runtime DATABASE_URL so alembic.ini doesn't need it hardcoded.</span>
+config.set_main_option(<span class="str">"sqlalchemy.url"</span>, get_settings().database_url)
+</pre>
+
+<p>
+  This means Alembic reads the same <span class="amber">DATABASE_URL</span>
+  the app does. One environment variable controls "where am I writing."
+  On a developer laptop it points at SQLite; in Azure Container Apps it
+  will point at the managed Postgres instance.
+</p>
+
+<div class="callout">
+  <span class="label">[ DEEP CUT ]</span> SQLite cannot <span class="amber">ALTER TABLE DROP COLUMN</span> (until very recent versions). Alembic gets around this with <span class="amber">render_as_batch=True</span> — it generates a "copy table to new schema, swap" dance. Our env.py turns this on automatically when the dialect is SQLite. You will hit this the first time you remove a column locally. Now you know why.
+</div>
+
+<h3>// sessions, two flavors</h3>
+
+<p>
+  <span class="amber">app/db.py</span> exposes two ways to get a
+  database session:
+</p>
+
+<pre class="code"><span class="kw">def</span> <span class="fn">get_session</span>() -> Iterator[Session]:
+    <span class="com">"""FastAPI dependency. Yields a session, commits on success, rolls back on error."""</span>
+    ...
+
+<span class="kw">@contextmanager</span>
+<span class="kw">def</span> <span class="fn">session_scope</span>() -> Iterator[Session]:
+    <span class="com">"""Plain context manager for CLI, scripts, tests."""</span>
+    ...
+</pre>
+
+<p>
+  Same engine, same sessionmaker, two interfaces. The FastAPI side
+  needs a dependency-injection-friendly generator. The CLI side needs
+  a plain <span class="amber">with</span> block. Don't write both
+  yourself in twenty places — write the helpers once.
+</p>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- 04 :: THE MAST CLIENT                                        -->
+<!-- ════════════════════════════════════════════════════════════ -->
+
+<h2 id="s04">[ 04 ] THE MAST CLIENT // taming astroquery</h2>
+
+<h3>// what is MAST</h3>
+
+<p>
+  <span class="amber">Mikulski Archive for Space Telescopes</span>, run
+  by STScI in Baltimore. It is the canonical home of JWST data, plus
+  Hubble, Kepler, TESS, and others. Its query interface is a thin
+  layer over an internal database; you ask for observations matching
+  criteria, then ask for the per-observation file list.
+</p>
+
+<p>
+  <span class="amber">astroquery</span> is the Python community's
+  toolkit for astronomy archives. <span class="amber">astroquery.mast.Observations</span>
+  is the JWST-flavored entrypoint:
+</p>
+
+<pre class="code"><span class="kw">from</span> astroquery.mast <span class="kw">import</span> Observations
+
+obs_table = Observations.query_criteria(
+    obs_collection=<span class="str">"JWST"</span>,
+    instrument_name=<span class="str">"NIRCAM*"</span>,   <span class="com"># MAST stores as "NIRCAM/IMAGE", etc.</span>
+)
+prod_table = Observations.get_product_list(obs_table)
+</pre>
+
+<p>
+  Both calls return <span class="amber">astropy.table.Table</span>
+  objects — fancy 2D arrays with named columns. Working with them
+  directly is doable, but:
+</p>
+
+<ul>
+  <li>They carry numpy dtypes that don't map cleanly to SQLAlchemy.</li>
+  <li>Masked values are <span class="amber">numpy.ma.masked</span>, not <span class="amber">None</span>.</li>
+  <li>You can't pickle them; you can't easily mock them.</li>
+</ul>
+
+<h3>// why wrap astroquery</h3>
+
+<p>
+  Our <span class="amber">MastClient</span> is the <span class="hi">only</span>
+  place in the codebase that knows about astroquery. Everything
+  downstream sees plain Python dataclasses:
+</p>
+
+<pre class="code"><span class="kw">@dataclass</span>
+<span class="kw">class</span> <span class="fn">MastObservation</span>:
+    mast_obs_id: <span class="kw">str</span>
+    program_id:  <span class="kw">str</span> | <span class="kw">None</span>
+    target_name: <span class="kw">str</span> | <span class="kw">None</span>
+    instrument:  <span class="kw">str</span> | <span class="kw">None</span>
+    filters:     <span class="kw">str</span> | <span class="kw">None</span>
+    ra:          <span class="kw">float</span> | <span class="kw">None</span>
+    dec:         <span class="kw">float</span> | <span class="kw">None</span>
+    observation_date:    datetime | <span class="kw">None</span>
+    public_release_date: datetime | <span class="kw">None</span>
+    products: <span class="kw">list</span>[MastProduct] = field(default_factory=<span class="kw">list</span>)
+</pre>
+
+<p>
+  Why this matters: <span class="hi">our tests never touch the
+  network</span>. We construct synthetic <span class="amber">astropy.table.Table</span>
+  objects in <span class="amber">tests/test_mast_assemble.py</span>,
+  hand them to <span class="amber">MastClient.assemble(...)</span>,
+  and assert on the resulting dataclasses. Fast, deterministic, and
+  resilient to MAST being down at midnight on a Saturday.
+</p>
+
+<h3>// the classification regex</h3>
+
+<p>
+  JWST filenames encode their product type. The plan §4 lists ten
+  product types worth caring about. We recognize them with a single
+  regex:
+</p>
+
+<pre class="code">_PRODUCT_SUFFIX_RE = re.compile(
+    <span class="str">r"_(?P&lt;ptype&gt;uncal|rate|rateints|cal|calints|i2d|s2d|s3d|x1d|c1d|cat|segm|phot|preview)"</span>
+    <span class="str">r"\.(?P&lt;ext&gt;fits|jpg|png|pdf|csv|ecsv)(?:\.gz)?$"</span>,
+    re.IGNORECASE,
+)
+</pre>
+
+<p>A cheat sheet for the four MVP product types:</p>
+
+<table class="dataflow">
+  <tr><td>i2d</td><td>Resampled 2D image. The pretty pictures.</td></tr>
+  <tr><td>x1d</td><td>Extracted 1D spectrum (one source, flux vs wavelength).</td></tr>
+  <tr><td>c1d</td><td>Combined 1D spectrum (multiple x1d stacks).</td></tr>
+  <tr><td>s2d</td><td>2D spectral image (before extraction to 1D).</td></tr>
+</table>
+
+<p>
+  The Phase 3 preview generator will be product-type-aware: i2d gets
+  an image preview with stretch options, x1d/c1d get a matplotlib
+  flux-vs-wavelength chart. The regex is small but it gates that whole
+  downstream behavior.
+</p>
+
+<h3>// MJD → datetime</h3>
+
+<p>
+  MAST records times in <span class="hi">Modified Julian Date</span>
+  (MJD) — days since November 17, 1858. Why 1858? Astronomical
+  inside joke. We convert at the boundary:
+</p>
+
+<pre class="code"><span class="kw">def</span> <span class="fn">_mjd_to_datetime</span>(mjd: <span class="kw">float</span> | <span class="kw">None</span>) -> datetime | <span class="kw">None</span>:
+    <span class="kw">if</span> mjd <span class="kw">is</span> <span class="kw">None</span>:
+        <span class="kw">return</span> <span class="kw">None</span>
+    <span class="kw">try</span>:
+        <span class="kw">return</span> Time(mjd, format=<span class="str">"mjd"</span>, scale=<span class="str">"utc"</span>).to_datetime(timezone=UTC)
+    <span class="kw">except</span> Exception:
+        <span class="kw">return</span> <span class="kw">None</span>
+</pre>
+
+<p>
+  Once it leaves the client, nobody downstream needs to know what an
+  MJD is.
+</p>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- 05 :: INGEST SERVICE                                         -->
+<!-- ════════════════════════════════════════════════════════════ -->
+
+<h2 id="s05">[ 05 ] INGEST SERVICE // idempotency as a discipline</h2>
+
+<h3>// the property we want</h3>
+
+<pre class="ascii" style="color: var(--cyan);">
+  ┌──────────────────────────────────────────────────────────────┐
+  │  Running ingest twice produces the same DB state as          │
+  │  running ingest once. Running it a thousand times is fine.   │
+  └──────────────────────────────────────────────────────────────┘
+</pre>
+
+<p>
+  This is <span class="hi">idempotency</span>. Without it, every
+  scheduled run would duplicate data, every retry on transient network
+  failure would corrupt the database, and you could never re-run an
+  ingest to "freshen" timestamps without fearing a side effect.
+</p>
+
+<p>The signature:</p>
+
+<pre class="code"><span class="kw">def</span> <span class="fn">ingest_observations</span>(session: Session, observations: Iterable[MastObservation]) -> IngestResult:
+    ...
+</pre>
+
+<p>The algorithm, per observation:</p>
+
+<pre class="ascii" style="color: var(--phosphor);">
+  ┌─ for each MastObservation ──────────────────────────────┐
+  │                                                         │
+  │   query DB: SELECT * FROM observations                  │
+  │             WHERE mast_obs_id = obs.mast_obs_id         │
+  │                                                         │
+  │   ┌─ exists? ──────────────────────────────────────┐    │
+  │   │                                                │    │
+  │   │   YES  → for each mutable field:               │    │
+  │   │           if (incoming != stored): update      │    │
+  │   │         count: observations_updated++          │    │
+  │   │                                                │    │
+  │   │   NO   → INSERT row; flush so we get obs.id    │    │
+  │   │         count: observations_created++          │    │
+  │   └────────────────────────────────────────────────┘    │
+  │                                                         │
+  │   ┌─ for each product of this observation ─────────┐    │
+  │   │                                                │    │
+  │   │   query DB: SELECT * FROM data_products        │    │
+  │   │             WHERE observation_id = obs.id      │    │
+  │   │               AND filename = prod.filename     │    │
+  │   │                                                │    │
+  │   │   exists? → maybe update + last_seen_at = now  │    │
+  │   │   else   → INSERT + first_seen_at = now        │    │
+  │   └────────────────────────────────────────────────┘    │
+  └─────────────────────────────────────────────────────────┘
+</pre>
+
+<h3>// first_seen vs last_seen</h3>
+
+<p>
+  Two timestamps that look redundant aren't.
+  <span class="amber">first_seen_at</span> is what we set on initial
+  INSERT and never touch again. <span class="amber">last_seen_at</span>
+  is bumped on every re-ingest. Why this matters:
+</p>
+
+<ul>
+  <li><span class="hi">Phase 2 alerts:</span> a watchlist for "newly public products" fires when <span class="amber">first_seen_at</span> is recent — even if MAST has been quiet for hours and we've polled twenty times.</li>
+  <li><span class="hi">Phase 2 reprocessed-product detection:</span> if <span class="amber">last_seen_at</span> stops advancing for a product, MAST has dropped it (probably replaced by a newer calibration).</li>
+  <li><span class="hi">Freshness metrics:</span> "what's the oldest <span class="amber">last_seen_at</span>?" tells us if our poller is alive.</li>
+</ul>
+
+<h3>// the in-batch dedup bug</h3>
+
+<p>
+  Our first version of the ingest loop had a subtle bug. The DB has a
+  unique constraint on <span class="amber">(observation_id, filename)</span>.
+  We check it with <span class="amber">session.scalar(SELECT ...)</span>
+  before inserting. Looks safe. Run the test that adds two products
+  with the same filename in one batch:
+</p>
+
+<pre class="code"><span class="err">sqlalchemy.exc.IntegrityError: UNIQUE constraint failed:
+  data_products.observation_id, data_products.filename</span>
+</pre>
+
+<p>
+  What happened: <span class="amber">session.add(prod1)</span> puts
+  prod1 in the unit of work but does not yet flush to the DB.
+  <span class="amber">session.scalar(...)</span> for prod2's
+  duplicate-check queries the DB — which doesn't see prod1 yet — so
+  the check passes. Both get added. The UNIQUE constraint fires at
+  commit time.
+</p>
+
+<p>The fix: track seen filenames in a Python set within the batch:</p>
+
+<pre class="code">seen_filenames_this_batch: <span class="kw">set</span>[<span class="kw">str</span>] = <span class="kw">set</span>()
+<span class="kw">for</span> src_prod <span class="kw">in</span> src_obs.products:
+    <span class="kw">if</span> src_prod.filename <span class="kw">in</span> seen_filenames_this_batch:
+        <span class="kw">continue</span>
+    <span class="com"># ... normal path ...</span>
+    seen_filenames_this_batch.add(src_prod.filename)
+</pre>
+
+<p>
+  This is <span class="hi">belt-and-suspenders</span> defense: the DB
+  constraint is the absolute backstop, the Python guard is the
+  performance and clarity layer. Both should exist.
+</p>
+
+<h3>// IngestResult: telemetry, not just logging</h3>
+
+<pre class="code"><span class="kw">@dataclass</span>
+<span class="kw">class</span> <span class="fn">IngestResult</span>:
+    observations_seen:    <span class="kw">int</span> = <span class="num">0</span>
+    observations_created: <span class="kw">int</span> = <span class="num">0</span>
+    observations_updated: <span class="kw">int</span> = <span class="num">0</span>
+    products_seen:        <span class="kw">int</span> = <span class="num">0</span>
+    products_created:     <span class="kw">int</span> = <span class="num">0</span>
+    products_updated:     <span class="kw">int</span> = <span class="num">0</span>
+    errors:               <span class="kw">list</span>[<span class="kw">str</span>] = field(default_factory=<span class="kw">list</span>)
+</pre>
+
+<p>
+  Returning a structured result instead of logging strings means the
+  CLI can render a Rich table, the API can return JSON, and Phase 2's
+  scheduled worker can emit Prometheus-ready metrics. Same data,
+  three surfaces. The function does not get to decide where its
+  result is rendered.
+</p>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- 06 :: CLI                                                    -->
+<!-- ════════════════════════════════════════════════════════════ -->
+
+<h2 id="s06">[ 06 ] CLI // python -m app and why it matters</h2>
+
+<h3>// the python -m pattern</h3>
+
+<p>
+  The plan literally specified the command:
+</p>
+
+<pre class="code"><span class="prompt">$</span> python -m app ingest mast --instrument NIRCAM --limit 100
+</pre>
+
+<p>
+  <span class="amber">python -m app</span> means "find the package
+  named <span class="amber">app</span>, run its <span class="amber">__main__.py</span>."
+  Why this instead of <span class="amber">python app/cli.py</span> or
+  an entry-point script?
+</p>
+
+<ul>
+  <li><span class="amber">Package context.</span> Imports work as <span class="amber">from app.foo import bar</span>, not <span class="amber">from foo import bar</span>. Avoids import-path confusion.</li>
+  <li><span class="amber">No setup.py shim.</span> Works the moment you install the package (<span class="amber">pip install -e .</span>) with no entry-point boilerplate.</li>
+  <li><span class="amber">Composable.</span> <span class="amber">python -m app.cli.ingest</span> would also work if we wanted to skip the top-level dispatcher.</li>
+</ul>
+
+<h3>// typer over click over argparse</h3>
+
+<p>
+  Typer is built on Click. Click is built on argparse. Why typer?
+  <span class="hi">Function signatures become the CLI</span>:
+</p>
+
+<pre class="code"><span class="kw">@app</span>.command(<span class="str">"mast"</span>)
+<span class="kw">def</span> <span class="fn">ingest_mast</span>(
+    instrument:  <span class="kw">str</span> | <span class="kw">None</span> = typer.Option(<span class="kw">None</span>, <span class="str">"--instrument"</span>, <span class="str">"-i"</span>),
+    program_id:  <span class="kw">str</span> | <span class="kw">None</span> = typer.Option(<span class="kw">None</span>, <span class="str">"--program-id"</span>, <span class="str">"-p"</span>),
+    target_name: <span class="kw">str</span> | <span class="kw">None</span> = typer.Option(<span class="kw">None</span>, <span class="str">"--target"</span>, <span class="str">"-t"</span>),
+    limit: <span class="kw">int</span> = typer.Option(<span class="num">100</span>, <span class="str">"--limit"</span>, <span class="str">"-n"</span>, min=<span class="num">1</span>, max=<span class="num">10_000</span>),
+    dry_run: <span class="kw">bool</span> = typer.Option(<span class="kw">False</span>, <span class="str">"--dry-run"</span>),
+    json_output: <span class="kw">bool</span> = typer.Option(<span class="kw">False</span>, <span class="str">"--json"</span>),
+) -> <span class="kw">None</span>:
+    ...
+</pre>
+
+<p>
+  Type annotations on the parameters drive the CLI parser, validation,
+  and the <span class="amber">--help</span> output. No separate schema
+  to keep in sync. <span class="amber">int</span> means "must parse as
+  an integer," the <span class="amber">min=1, max=10_000</span> enforces
+  the range with a friendly error.
+</p>
+
+<h3>// the two output modes</h3>
+
+<p>
+  Default mode: <span class="amber">rich.console.Console</span> +
+  <span class="amber">rich.table.Table</span> — pretty boxed output
+  for humans. <span class="amber">--json</span> mode: a single JSON
+  line on stdout — machine-readable for scripts, CI, and the eventual
+  Phase 2 scheduled worker that will reuse the same code path.
+</p>
+
+<div class="callout">
+  <span class="label">[ WAR STORY ]</span> Our first version printed
+  <span class="amber">f"  → {n} observations"</span> with a Unicode
+  arrow. Worked fine in our editor. Failed instantly on PowerShell
+  because Windows defaulted to <span class="amber">cp1252</span>
+  encoding for stdout. Lesson: in CLI output strings, prefer ASCII or
+  set <span class="amber">PYTHONIOENCODING=utf-8</span>. Rich's
+  box-drawing chars work because Rich talks to the Windows console
+  API directly; our literal f-string did not.
+</div>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- 07 :: API LAYER                                              -->
+<!-- ════════════════════════════════════════════════════════════ -->
+
+<h2 id="s07">[ 07 ] API LAYER // FastAPI, Pydantic v2, pagination</h2>
+
+<h3>// the endpoints</h3>
+
+<pre class="ascii">
+  ┌────────────────────────────────────────────────────────────┐
+  │  GET   /health                                             │
+  │  GET   /api/observations             ?instrument= &program_id=   │
+  │  GET   /api/observations/{id}        + nested data_products│
+  │  GET   /api/products                 ?product_type= &instrument= │
+  │  GET   /api/products/{id}                                  │
+  │  POST  /api/admin/ingest/mast-sync   (inline; moves to RQ Phase 2) │
+  │  GET   /docs                         auto-generated OpenAPI│
+  └────────────────────────────────────────────────────────────┘
+</pre>
+
+<h3>// from_attributes</h3>
+
+<p>
+  Pydantic v2 schemas that read directly from SQLAlchemy objects use
+  <span class="amber">model_config = ConfigDict(from_attributes=True)</span>:
+</p>
+
+<pre class="code"><span class="kw">class</span> <span class="fn">ObservationRead</span>(BaseModel):
+    model_config = ConfigDict(from_attributes=<span class="kw">True</span>)
+
+    id: <span class="kw">int</span>
+    mast_obs_id: <span class="kw">str</span>
+    program_id:  <span class="kw">str</span> | <span class="kw">None</span>
+    target_name: <span class="kw">str</span> | <span class="kw">None</span>
+    <span class="com"># ... etc</span>
+</pre>
+
+<p>
+  Then <span class="amber">ObservationRead.model_validate(obs)</span>
+  pulls fields off the ORM object by attribute name. No manual
+  <span class="amber">{ "id": obs.id, "mast_obs_id": obs.mast_obs_id ...}</span>
+  copy-paste.
+</p>
+
+<h3>// PEP 695 generics for pagination</h3>
+
+<pre class="code"><span class="kw">class</span> <span class="fn">Page</span>[T](BaseModel):
+    items: <span class="kw">list</span>[T]
+    total: <span class="kw">int</span>
+    limit: <span class="kw">int</span>
+    offset: <span class="kw">int</span>
+</pre>
+
+<p>
+  That <span class="amber">[T]</span> on the class name is PEP 695
+  generic syntax, new in Python 3.12. Pre-3.12 you would write
+  <span class="amber">T = TypeVar("T"); class Page(BaseModel, Generic[T]):</span>.
+  The new syntax is cleaner. It is also why
+  <span class="amber">requires-python</span> in our pyproject.toml is
+  <span class="amber">&gt;=3.12</span>.
+</p>
+
+<p>
+  Usage: <span class="amber">Page[ObservationRead]</span> and
+  <span class="amber">Page[ProductRow]</span> are distinct response
+  models with full type info. FastAPI uses these to generate the
+  OpenAPI schema at <span class="amber">/docs</span>.
+</p>
+
+<h3>// flat product rows vs nested observation details</h3>
+
+<p>
+  Notice we have <span class="amber">ProductRow</span> (a flat join of
+  product + its parent observation) and <span class="amber">ObservationDetail</span>
+  (an observation with its nested products list). These serve different
+  UX needs:
+</p>
+
+<ul>
+  <li><span class="hi">Feed view</span> wants a flat list — one row per file, each card needs target/instrument/program/filter without an extra fetch. → <span class="amber">ProductRow</span>.</li>
+  <li><span class="hi">Detail view</span> wants "this one observation, with all its products." → <span class="amber">ObservationDetail</span> with <span class="amber">selectinload</span> to fetch products in a single extra query (avoids N+1).</li>
+</ul>
+
+<h3>// the admin sync endpoint</h3>
+
+<pre class="code"><span class="kw">@router</span>.post(<span class="str">"/ingest/mast-sync"</span>)
+<span class="kw">async def</span> <span class="fn">mast_sync</span>(...):
+    client = MastClient()
+    observations = <span class="kw">await</span> run_in_threadpool(client.fetch_jwst, ...)
+    result = <span class="kw">await</span> run_in_threadpool(ingest_observations, session, observations)
+    <span class="kw">return</span> IngestSyncResponse(**result.as_dict())
+</pre>
+
+<p>
+  Two things to notice:
+</p>
+
+<ul>
+  <li><span class="amber">run_in_threadpool</span>: astroquery is synchronous and slow. Calling it directly from an <span class="amber">async def</span> handler would block FastAPI's event loop for the entire 60-second MAST query. <span class="amber">run_in_threadpool</span> offloads to a worker thread.</li>
+  <li><span class="amber">This is a Phase 2 staging post.</span> In Phase 2 the work moves to RQ — the endpoint will enqueue a job ID instead of blocking the request for a minute. For Phase 1, blocking the admin caller is acceptable.</li>
+</ul>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- 08 :: FRONTEND                                               -->
+<!-- ════════════════════════════════════════════════════════════ -->
+
+<h2 id="s08">[ 08 ] FRONTEND // Server Components, ISR, no client fetch</h2>
+
+<h3>// the architectural choice</h3>
+
+<p>
+  Look at <span class="amber">components/product-feed.tsx</span>:
+</p>
+
+<pre class="code"><span class="kw">export async function</span> <span class="fn">ProductFeed</span>() {
+  <span class="kw">const</span> result = <span class="kw">await</span> <span class="fn">getProducts</span>({ limit: <span class="num">50</span> });
+  <span class="kw">if</span> (!result.ok) <span class="kw">return</span> &lt;ErrorState ... /&gt;;
+  <span class="kw">if</span> (result.data.items.length === <span class="num">0</span>) <span class="kw">return</span> &lt;EmptyState /&gt;;
+  <span class="kw">return</span> &lt;table&gt;...&lt;/table&gt;;
+}
+</pre>
+
+<p>
+  That <span class="amber">async function</span> is a
+  <span class="hi">React Server Component</span>. It runs on the
+  Next.js server at request time, fetches from our FastAPI, and ships
+  the rendered HTML to the browser. No JavaScript downloaded for the
+  fetch. No client-side <span class="amber">useEffect</span>. No
+  loading spinner. The user gets HTML.
+</p>
+
+<p>This is the right call here because:</p>
+
+<ul>
+  <li>The data is the same for every visitor (no per-user filtering yet).</li>
+  <li>The feed updates seconds-to-minutes, not milliseconds — no need for client-side reactivity.</li>
+  <li>SEO and shareability: server-rendered HTML means a tweet preview, a social card, a screenshot all look right.</li>
+</ul>
+
+<h3>// ISR-style caching at the fetch level</h3>
+
+<pre class="code">fetch(<span class="str">`${API_BASE}/api/products?...`</span>, {
+  <span class="com">// The feed updates from background ingestion;</span>
+  <span class="com">// 10s is a reasonable freshness target.</span>
+  next: { revalidate: <span class="num">10</span> },
+});
+</pre>
+
+<p>
+  <span class="amber">next: { revalidate: 10 }</span> tells Next.js:
+  cache this response for 10 seconds, then revalidate on the next
+  request. Result: 99% of page loads serve from cache, 1% trigger a
+  background refresh, no user ever waits.
+</p>
+
+<p>
+  When you swap the data source later (replace SQLite with Azure
+  Postgres, add Redis between API and DB), the frontend doesn't
+  change. The contract is the JSON shape, not the storage.
+</p>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- 09 :: END-TO-END DATA FLOW                                   -->
+<!-- ════════════════════════════════════════════════════════════ -->
+
+<h2 id="s09">[ 09 ] END-TO-END DATA FLOW // request to render</h2>
+
+<h3>// the ingest path (one-time, manual or scheduled later)</h3>
+
+<pre class="ascii" style="color: var(--phosphor);">
+  ┌──────────────────────┐
+  │ developer terminal   │
+  └──────────┬───────────┘
+             │  python -m app ingest mast --instrument NIRCAM --limit 10
+             ▼
+  ┌──────────────────────┐
+  │ app/__main__.py      │   typer dispatcher
+  └──────────┬───────────┘
+             │
+             ▼
+  ┌──────────────────────┐
+  │ app/cli/ingest.py    │   parse flags, instantiate MastClient
+  └──────────┬───────────┘
+             │
+             ▼
+  ┌──────────────────────┐
+  │ MastClient           │   astroquery.mast.Observations.query_criteria(...)
+  │ .fetch_jwst()        │       ↓
+  │                      │   astroquery.mast.Observations.get_product_list(...)
+  └──────────┬───────────┘       ↓
+             │              [ MAST archive @ STScI, returns ~60s later ]
+             ▼
+  ┌──────────────────────┐
+  │ MastClient.assemble  │   astropy.Table → list[MastObservation]
+  └──────────┬───────────┘
+             │
+             ▼
+  ┌──────────────────────┐
+  │ ingest_observations  │   SELECT-then-INSERT-or-UPDATE, idempotent
+  │ + session_scope      │   first_seen_at / last_seen_at bookkeeping
+  └──────────┬───────────┘
+             │
+             ▼
+  ┌──────────────────────┐
+  │ webbwatch.db (SQLite)│   42 rows in data_products, 10 in observations
+  └──────────────────────┘
+</pre>
+
+<h3>// the request path (every page load)</h3>
+
+<pre class="ascii" style="color: var(--cyan);">
+  ┌──────────────────────┐
+  │ browser              │   GET http://localhost:3000/
+  └──────────┬───────────┘
+             │
+             ▼
+  ┌──────────────────────┐
+  │ Next.js dev server   │   render app/page.tsx (Server Component)
+  └──────────┬───────────┘
+             │
+             ▼
+  ┌──────────────────────┐
+  │ ProductFeed (RSC)    │   await getProducts({ limit: 50 })
+  └──────────┬───────────┘
+             │
+             ▼
+  ┌──────────────────────┐
+  │ fetch(API_BASE/...)  │   cached for 10s via next.revalidate
+  └──────────┬───────────┘
+             │
+             ▼
+  ┌──────────────────────┐
+  │ FastAPI api          │   list_products() handler
+  └──────────┬───────────┘
+             │
+             ▼
+  ┌──────────────────────┐
+  │ SQLAlchemy session   │   SELECT ... JOIN ... ORDER BY observation_date DESC LIMIT 50
+  └──────────┬───────────┘
+             │
+             ▼
+  ┌──────────────────────┐
+  │ webbwatch.db (SQLite)│
+  └──────────┬───────────┘
+             │  rows
+             ▼
+  [ ProductRow Pydantic models → JSON ]
+             │
+             ▼
+  [ React Server Component renders &lt;table&gt; → HTML ]
+             │
+             ▼
+  ┌──────────────────────┐
+  │ browser              │   sees a styled table of JWST products
+  └──────────────────────┘
+</pre>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- 10 :: DECISIONS LOG                                          -->
+<!-- ════════════════════════════════════════════════════════════ -->
+
+<h2 id="s10">[ 10 ] DECISIONS LOG // the choices behind the code</h2>
+
+<p>
+  Decisions made in Phase 1 that future-you should not re-litigate
+  without good reason:
+</p>
+
+<table class="dataflow">
+  <tr><td>SQLite local / Postgres prod</td>
+      <td>One DATABASE_URL switch, zero per-dialect branches in models. Works because we stayed inside the SQLAlchemy-portable subset (no JSONB, no SQL functions, no Postgres-only types).</td></tr>
+  <tr><td>Wrap astroquery, don't expose it</td>
+      <td>Tests never touch the network. Replacing astroquery later (with a custom MAST REST client, or astropy-only) is a contained refactor.</td></tr>
+  <tr><td>Sync DB sessions, not async</td>
+      <td>The dominant workload is batch ingestion. Async SQLAlchemy adds complexity (separate engine class, await everywhere) for marginal benefit at our request volume. Revisit when the API gets popular.</td></tr>
+  <tr><td>Plain SQLAlchemy + separate Pydantic</td>
+      <td>SQLModel merges them and is convenient for small projects, but has sharp edges around relationships and migrations. Standard SQLAlchemy + Pydantic v2 is more idiomatic and gives independent evolution.</td></tr>
+  <tr><td>Typer for CLI</td>
+      <td>Type-annotation-driven CLIs are 1/3 the code of equivalent Click and play well with mypy.</td></tr>
+  <tr><td>Per-file ruff ignores (not global)</td>
+      <td>Forces an intentional escape hatch. <span class="amber">B008</span> ignored in routes (FastAPI Depends is idiomatic there) but enforced everywhere else.</td></tr>
+  <tr><td>Min Python 3.12</td>
+      <td>Enables PEP 695 generics (<span class="amber">class Page[T]</span>). Python 3.11 EOL is Oct 2027; cutting it now costs nothing.</td></tr>
+  <tr><td>Server Components, not client fetch</td>
+      <td>The feed is shared, slow-moving, and benefits from server-side caching. Client-side fetching would add a loading spinner and SEO would be empty.</td></tr>
+  <tr><td>In-app dedup AND DB unique constraint</td>
+      <td>Belt and suspenders. The DB constraint is the absolute backstop; the Python guard handles the in-batch case before it ever reaches the DB.</td></tr>
+</table>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- 11 :: GOTCHAS                                                -->
+<!-- ════════════════════════════════════════════════════════════ -->
+
+<h2 id="s11">[ 11 ] GOTCHAS // bugs and surprises we cleared</h2>
+
+<h3>// 1. GitHub push protection blocked the first commit</h3>
+
+<p>
+  The Azurite emulator uses a <span class="hi">well-known dev account
+  key</span> published in Microsoft's own docs. We put it in
+  <span class="amber">.env.example</span>. GitHub's secret scanner
+  doesn't know it's a published-by-Microsoft fake — it matched the
+  pattern <span class="amber">Azure Storage Account Access Key</span>
+  and rejected the push.
+</p>
+
+<p>
+  Fix: replace the literal key with the
+  <span class="amber">UseDevelopmentStorage=true</span> SDK shortcut
+  (Azure clients recognize it and fill in the dev account
+  internally). Then squash the local history into a fresh root
+  commit so the bad key never enters published git history.
+</p>
+
+<h3>// 2. Unicode arrow in CLI breaking on PowerShell</h3>
+
+<p>
+  Covered in §06. PowerShell on Windows defaults to cp1252 for
+  stdout encoding. Our CLI's <span class="amber">f"  → ..."</span>
+  crashed with <span class="amber">UnicodeEncodeError</span>.
+</p>
+
+<p>
+  Fix: ASCII in CLI literal strings, and set
+  <span class="amber">PYTHONIOENCODING=utf-8</span> for safety on
+  Windows.
+</p>
+
+<h3>// 3. The in-batch dedup IntegrityError</h3>
+
+<p>
+  Covered in §05. Two products with the same filename in one batch
+  bypassed our SELECT-based duplicate check because the first INSERT
+  was not yet flushed when the second check ran.
+</p>
+
+<p>
+  Fix: in-memory <span class="amber">set</span> of filenames seen this
+  batch.
+</p>
+
+<h3>// 4. astroquery hanging on a second consecutive call</h3>
+
+<p>
+  The first <span class="amber">python -m app ingest mast</span>
+  completed cleanly. A second call from a fresh process never
+  returned — suspect astroquery's local response cache holding a
+  lock from the first process.
+</p>
+
+<p>
+  Workaround for now: verify dedup in-process with the live SQLite
+  DB instead of round-tripping MAST twice. The actual fix is to
+  disable or relocate the astroquery cache; a Phase 2 task because
+  the scheduled poller will be running repeatedly from the same
+  worker process.
+</p>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- 12 :: GRAND ARC                                              -->
+<!-- ════════════════════════════════════════════════════════════ -->
+
+<h2 id="s12">[ 12 ] THE GRAND ARC // where phase 1 sits</h2>
+
+<pre class="ascii">
+  ┌─ PHASE 0 ─────────────────────────────────────────────────────┐  ✓
+  │  monorepo, Next.js skeleton, FastAPI /health, RQ worker stub  │
+  │  Docker Compose, CI, AI provider interface                    │
+  └───────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+  ┌─ PHASE 1 ─────────────────────────────────────────────────────┐  ✓  &lt;-- YOU ARE HERE
+  │  MAST metadata ingestion + product feed                       │
+  │  DB models, MAST client, ingest service, CLI, API, frontend   │
+  └───────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+  ┌─ PHASE 2 ─────────────────────────────────────────────────────┐
+  │  new-data detection + alerts                                  │
+  │  scheduled polling, watchlists, AWS SNS → HTTPS, delivery     │
+  └───────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+  ┌─ PHASE 3 ─────────────────────────────────────────────────────┐
+  │  FITS download, cache, preview generation                     │
+  │  i2d images, x1d/c1d spectrum charts, file-size guards        │
+  └───────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+  ┌─ PHASE 4 ─────────────────────────────────────────────────────┐
+  │  deterministic analysis engine                                │
+  │  image stats, source detection, spectrum peak finding         │
+  └───────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+  ┌─ PHASE 5 ─────────────────────────────────────────────────────┐
+  │  local AI analysis (Ollama / llama.cpp on RTX 3070)           │
+  │  plain-English summaries, quality flags, tags                 │
+  └───────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+  ┌─ PHASE 6 ─────────────────────────────────────────────────────┐
+  │  cloud AI review (OpenAI or Azure OpenAI)                     │
+  │  reviewer mode, structured AnalysisReport schema              │
+  └───────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+  ┌─ PHASE 7 ─────────────────────────────────────────────────────┐
+  │  shareable discovery feed                                     │
+  │  feed cards, social preview images, RSS, lightweight social   │
+  └───────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+  ┌─ PHASE 8 ─────────────────────────────────────────────────────┐
+  │  hardening, Azure deployment, launch                          │
+  │  auth, rate limiting, Key Vault, Bicep, Container Apps        │
+  └───────────────────────────────────────────────────────────────┘
+</pre>
+
+<p>
+  Every phase from here on consumes the database we just built.
+  Previews attach to <span class="amber">DataProduct</span>. Analyses
+  reference <span class="amber">data_product_id</span>. Alerts fire on
+  <span class="amber">first_seen_at</span>. Watchlists query by
+  <span class="amber">instrument / target_name / product_type</span> —
+  the exact columns we indexed.
+</p>
+
+<p>
+  Get the schema right early, and the next seven phases mostly add
+  rows, columns, and consumers without touching the foundation.
+</p>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- 13 :: PHASE 2 PREVIEW                                        -->
+<!-- ════════════════════════════════════════════════════════════ -->
+
+<h2 id="s13">[ 13 ] PHASE 2 PREVIEW // what we wire next</h2>
+
+<p>
+  Phase 1 is the moment WebbWatch has a torso. Phase 2 is when it
+  starts noticing things.
+</p>
+
+<h3>// the additions</h3>
+
+<ul>
+  <li><span class="amber">Worker actually works.</span> RQ jobs scheduled on a cron-like cadence (<span class="dim">every 15 min: poll MAST; hourly: list S3 anonymously</span>) calling the same <span class="amber">ingest_observations</span> we just wrote.</li>
+  <li><span class="amber">Watchlists.</span> New ORM model with a <span class="amber">criteria_json</span> column. Users register interest in instruments, programs, targets, product types, sky regions, or keywords.</li>
+  <li><span class="amber">Matching engine.</span> When a product is <span class="hi">newly created</span> (not just updated), evaluate every enabled watchlist against it. Emit alerts on matches.</li>
+  <li><span class="amber">Alerts table + UI.</span> A <span class="amber">/alerts</span> page surfacing what fired and why.</li>
+  <li><span class="amber">Delivery adapters.</span> At minimum a Discord webhook. Probably also Azure Communication Services email (more Azure practice). RSS feed for the patient.</li>
+  <li><span class="amber">Cross-cloud SNS bridge.</span> AWS SNS topic for new JWST data can POST to an HTTPS endpoint hosted on Azure Container Apps — no AWS account needed on our side, just a verified subscription handshake at <span class="amber">POST /api/webhooks/aws/jwst</span>.</li>
+</ul>
+
+<h3>// the architectural pivot</h3>
+
+<p>
+  The big shift: <span class="hi">ingest stops being driven by humans
+  running CLIs</span>. The CLI stays as a developer tool, but the
+  production path is RQ jobs scheduled by the worker. The API gains a
+  job-status endpoint so the admin can see "last successful MAST poll:
+  3 minutes ago, 4 new products."
+</p>
+
+<h3>// pre-flight questions</h3>
+
+<p>Before starting Phase 2, decide:</p>
+
+<ul>
+  <li>Default poll cadence: 15 min for MAST, hourly for S3?</li>
+  <li>Email via Azure Communication Services, or skip email and do in-app + Discord only for Phase 2?</li>
+  <li>Real auth user model now, or hardcoded <span class="amber">user_id="default"</span> until Phase 8?</li>
+  <li>Move the ingest service into <span class="amber">packages/shared/</span>, or have the worker <span class="amber">pip install -e ../api</span> for now?</li>
+</ul>
+
+<h3>// the done condition</h3>
+
+<pre class="ascii" style="color: var(--cyan);">
+  ┌────────────────────────────────────────────────────────────┐
+  │  Phase 2 is done when:                                     │
+  │                                                            │
+  │    1. The worker is scheduled and polling without human    │
+  │       intervention.                                        │
+  │                                                            │
+  │    2. A user can POST a watchlist with criteria and        │
+  │       receive an in-app alert when matching data arrives.  │
+  │                                                            │
+  │    3. At least one delivery adapter (Discord or email)     │
+  │       posts on alert creation.                             │
+  │                                                            │
+  │    4. New tests cover: watchlist matching, the SNS         │
+  │       handshake (mocked), end-to-end alert creation.       │
+  └────────────────────────────────────────────────────────────┘
+</pre>
+
+<hr>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- SHUTDOWN                                                     -->
+<!-- ════════════════════════════════════════════════════════════ -->
+
+<pre class="ascii" style="color: var(--phosphor-dim);">
+  ══════════════════════════════════════════════════════════════════════
+                       /// END OF TRANSMISSION ///
+  ══════════════════════════════════════════════════════════════════════
+</pre>
+
+<p>
+  <span class="prompt">brandon@webbwatch:~$</span> <span class="dim">grep -c "data_product" webbwatch.db</span><br>
+  <span class="hi">42</span>
+</p>
+<p>
+  <span class="prompt">brandon@webbwatch:~$</span> <span class="dim">echo "phase 1 // shipped // ready for phase 2"</span><br>
+  phase 1 // shipped // ready for phase 2
+</p>
+<p>
+  <span class="prompt">brandon@webbwatch:~$</span> <span class="cursor"></span>
+</p>
+
+<pre class="ascii dim" style="margin-top: 2rem; font-size: 11px;">
+  ─────────────────────────────────────────────────────────────────────
+  generated for nightshift study :: keep one eye on the polar plot
+  document: docs/phase1-study.html
+  related : webbwatch_ai_project_plan.md, CLAUDE.md, README.md
+  ─────────────────────────────────────────────────────────────────────
+</pre>
+
+</main>
+</body>
+</html>
