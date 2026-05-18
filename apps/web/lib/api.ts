@@ -21,3 +21,65 @@ export async function getApiHealth(): Promise<HealthResult> {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
+
+// ---------------------------------------------------------------------------
+// Phase 1: JWST data products feed
+
+export interface ProductRow {
+  id: number;
+  filename: string;
+  product_type: string | null;
+  file_size: number | null;
+  cloud_uri: string | null;
+  mast_download_uri: string | null;
+  observation_id: number;
+  mast_obs_id: string;
+  target_name: string | null;
+  instrument: string | null;
+  filters: string | null;
+  program_id: string | null;
+  observation_date: string | null;
+  public_release_date: string | null;
+}
+
+export interface Page<T> {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ProductListQuery {
+  productType?: string;
+  instrument?: string;
+  programId?: string;
+  targetName?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export type Result<T> = { ok: true; data: T } | { ok: false; error: string };
+
+export async function getProducts(
+  q: ProductListQuery = {},
+): Promise<Result<Page<ProductRow>>> {
+  const params = new URLSearchParams();
+  if (q.productType) params.set("product_type", q.productType);
+  if (q.instrument) params.set("instrument", q.instrument);
+  if (q.programId) params.set("program_id", q.programId);
+  if (q.targetName) params.set("target_name", q.targetName);
+  params.set("limit", String(q.limit ?? 50));
+  params.set("offset", String(q.offset ?? 0));
+
+  try {
+    const res = await fetch(`${API_BASE}/api/products?${params.toString()}`, {
+      // The feed updates from background ingestion; 10s is a reasonable freshness target.
+      next: { revalidate: 10 },
+    });
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const data = (await res.json()) as Page<ProductRow>;
+    return { ok: true, data };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}

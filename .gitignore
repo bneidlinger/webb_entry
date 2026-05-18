@@ -59,6 +59,10 @@ data/
 tmp/
 *.fits
 *.fits.gz
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
 
 # ---- Logs ----
 logs/

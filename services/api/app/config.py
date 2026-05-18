@@ -25,9 +25,9 @@ class Settings(BaseSettings):
     cors_allowed_origins: str = Field(default="http://localhost:3000")
 
     # ---- Database / Redis ----
-    database_url: str = Field(
-        default="postgresql+psycopg://webbwatch:webbwatch_dev_password@localhost:5432/webbwatch"
-    )
+    # Default to a file-backed SQLite DB under the api service so the CLI works without Docker.
+    # Set DATABASE_URL=postgresql+psycopg://... when Postgres is up (locally or in Azure).
+    database_url: str = Field(default="sqlite+pysqlite:///./webbwatch.db")
     redis_url: str = Field(default="redis://localhost:6379/0")
 
     # ---- Azure Blob Storage (our storage; Azurite locally) ----
