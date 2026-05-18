@@ -1,0 +1,117 @@
+# WebbWatch AI — local development stack.
+# Run from repo root:  docker compose -f infra/docker-compose.yml up --build
+
+name: webbwatch
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-webbwatch}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-webbwatch_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-webbwatch}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-webbwatch}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  azurite:
+    # Microsoft's official Azure Storage emulator. Implements Blob, Queue, and Table APIs
+    # against the well-known dev account `devstoreaccount1`.
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    restart: unless-stopped
+    command: >
+      azurite
+      --blobHost 0.0.0.0 --blobPort 10000
+      --queueHost 0.0.0.0 --queuePort 10001
+      --tableHost 0.0.0.0 --tablePort 10002
+      --location /data --debug /data/debug.log
+    ports:
+      - "10000:10000"  # Blob
+      - "10001:10001"  # Queue
+      - "10002:10002"  # Table
+    volumes:
+      - azurite_data:/data
+    healthcheck:
+      # Azurite returns 400 on GET / (no SAS), which still proves the listener is up.
+      test: ["CMD-SHELL", "wget -q -O- --tries=1 http://localhost:10000/ || true"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: ../services/api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-webbwatch}:${POSTGRES_PASSWORD:-webbwatch_dev_password}@postgres:5432/${POSTGRES_DB:-webbwatch}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../services/api/app:/app/app
+
+  worker:
+    build:
+      context: ../services/worker
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-webbwatch}:${POSTGRES_PASSWORD:-webbwatch_dev_password}@postgres:5432/${POSTGRES_DB:-webbwatch}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../services/worker/worker:/app/worker
+
+  web:
+    build:
+      context: ../apps/web
+      dockerfile: Dockerfile
+      target: dev
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+      NEXT_TELEMETRY_DISABLED: "1"
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../apps/web:/app
+      - /app/node_modules
+      - /app/.next
+
+volumes:
+  postgres_data:
+  azurite_data:

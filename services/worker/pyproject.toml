@@ -1,0 +1,54 @@
+[project]
+name = "webbwatch-worker"
+version = "0.1.0"
+description = "WebbWatch AI — background workers for FITS ingestion, preview generation, and analysis."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "rq>=2.0",
+  "redis>=5.1",
+  "pydantic>=2.9",
+  "pydantic-settings>=2.6",
+  "sqlalchemy>=2.0",
+  "psycopg[binary]>=3.2",
+  "httpx>=0.27",
+  "structlog>=24.4",
+  # Astronomy / science
+  "astropy>=6.1",
+  "astroquery>=0.4.7",
+  "numpy>=2.0",
+  "matplotlib>=3.9",
+  "pillow>=10.4",
+  # Our storage = Azure Blob (Azurite locally, Azure Storage in prod)
+  "azure-storage-blob>=12.23",
+  "azure-identity>=1.19",
+  # Reading JWST data from AWS S3 anonymously (UNSIGNED). No AWS account needed.
+  "boto3>=1.35",
+  "botocore>=1.35",
+  # Cloud AI — the openai SDK supports both api.openai.com and Azure OpenAI.
+  "openai>=1.54",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3",
+  "ruff>=0.7",
+  "mypy>=1.13",
+]
+photutils = [
+  "photutils>=2.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["worker"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
