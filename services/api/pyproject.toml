@@ -26,6 +26,8 @@ dependencies = [
   # MAST + astronomy (also used by worker; lives here too so the CLI/API can ingest directly)
   "astropy>=6.1",
   "astroquery>=0.4.7",
+  # SNS signature verification (X.509 cert + RSA verify)
+  "cryptography>=43.0",
 ]
 
 [project.optional-dependencies]

@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { HealthBadge } from "@/components/health-badge";
 import { ProductFeed } from "@/components/product-feed";
 
@@ -13,6 +15,13 @@ export default function HomePage() {
             Live discovery and analysis for newly public James Webb Space Telescope data
             products. Deterministic tools first. AI commentary second. Sources cited.
           </p>
+          <Link
+            href="/alerts"
+            className="mt-4 inline-flex items-center gap-2 rounded-full border border-webb-star/20 bg-webb-ink/60 px-3 py-1 text-xs text-webb-star/80 hover:border-webb-accent/40 hover:text-webb-star"
+          >
+            <span className="size-1.5 rounded-full bg-webb-accent" />
+            Watchlist alerts →
+          </Link>
         </div>
         <HealthBadge />
       </header>

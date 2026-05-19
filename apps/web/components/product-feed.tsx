@@ -55,7 +55,7 @@ export async function ProductFeed() {
   if (!result.ok) {
     return (
       <div className="mt-6 rounded-lg border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-200">
-        Couldn't reach the API ({result.error}). Is the FastAPI server running on{" "}
+        Couldn&apos;t reach the API ({result.error}). Is the FastAPI server running on{" "}
         <code className="rounded bg-webb-deep px-1.5 py-0.5 text-xs">localhost:8000</code>?
       </div>
     );

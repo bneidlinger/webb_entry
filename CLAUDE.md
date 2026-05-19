@@ -98,7 +98,7 @@ These are decisions already made; follow them unless there's a real reason to ch
 - **Commits**: one commit per phase or per cohesive change. Conventional-ish ("Phase N: ..." or "<area>: ..."). Co-author trailer for AI assistance. No `--no-verify`, no `--amend` on pushed commits.
 - **Secrets**: never put real secrets in `.env.example`. GitHub push protection is on; even false-positive matches (like the Azurite well-known dev key) get blocked. Use `UseDevelopmentStorage=true` for Azurite.
 
-## State (2026-05-17)
+## State (2026-05-18)
 
 **Phase 0 — scaffold** ✓ shipped (`commit 22223f3`)
 - Monorepo, Next.js 15 + Tailwind, FastAPI with `/health`, RQ worker skeleton, Azurite/Postgres/Redis in compose, GitHub Actions CI, `CloudAIProvider` interface with OpenAI + Azure OpenAI adapters.
@@ -109,60 +109,32 @@ These are decisions already made; follow them unless there's a real reason to ch
 - CLI: `python -m app ingest mast --instrument NIRCAM --limit 100`.
 - API: `GET /api/observations`, `GET /api/observations/{id}`, `GET /api/products`, `GET /api/products/{id}`, `POST /api/admin/ingest/mast-sync`.
 - Frontend home page shows real JWST products as a table.
-- E2E verified locally: 10 obs / 42 products ingested from real MAST; re-ingest produced 0/0 (dedup works).
-- 8 unit tests pass, ruff clean, frontend typechecks + builds.
 
-**Phase 2 — new-data detection + alerts** ← *next*
+**Phase 2 — new-data detection + alerts** ✓ shipped
+- Worker pip-installs `services/api` editable so it imports the same `app.clients.mast` + `app.services.ingest`. `worker/schedule.py` registers two periodic jobs via `rq-scheduler`: MAST poll every 30 min, anonymous S3 listing every 6 h (defaults; tune via env).
+- New ORM models: `Watchlist(user_id="default", name, criteria_json, enabled)`, `Alert(watchlist_id, data_product_id, reason, delivery_status, read_at)`. Migration `2d50cfb24ccd`.
+- Matching engine: `app/services/match.py` evaluates instruments / programs / targets / product_types / cone (haversine) / keywords against `(product, observation)`. AND across keys, OR within a key.
+- `ingest_observations` calls `evaluate_watchlists` for every *newly created* product — updates never re-alert. `alerts_created` count surfaces in `IngestResult`.
+- Delivery: `app/services/delivery/discord.py` posts an embed to `DISCORD_WEBHOOK_URL` (no-op when unset). `deliver_pending_alerts` runs after each ingest pass and stamps `delivery_status`.
+- API: `GET/POST/GET/PATCH/DELETE /api/watchlists`, `GET /api/alerts`, `POST /api/alerts/{id}/read`, `GET /api/feed.rss` (RSS 2.0), `POST /api/webhooks/aws/jwst` (off by default, SubscriptionConfirmation handshake + RSA SHA1/SHA256 signature verification when enabled).
+- Frontend: new `/alerts` page with cards per match + delivery-status badge; home page links to it.
+- Tests (31 new): matching matrix, alert emission e2e, SNS handshake + signature gating, watchlist CRUD, alerts feed + RSS. 39 total, all pass.
 
-**Phases 3–8** see [plan §11](webbwatch_ai_project_plan.md).
+**Phase 3 — preview + spectrum chart generation** ← *next*
+- Workers fetch FITS from S3 (anonymous), generate PNG previews + spectrum charts via astropy + matplotlib, upload to Azure Blob (Azurite locally).
+- Surface previews in the product feed + per-alert cards.
+- See [plan §6](webbwatch_ai_project_plan.md).
 
-## Phase 2 directions — new-data detection + alerts
+**Phases 4–8** see [plan §11](webbwatch_ai_project_plan.md).
 
-Goal: detect newly available public JWST products and notify users who care.
+## Phase 2 directions — new-data detection + alerts (shipped, retained for reference)
 
-### What's already in place that helps
+### Decisions locked in
 
-- Idempotent ingest (`ingest_observations`) tracks `first_seen_at` and `last_seen_at` on every product, so polling is safe to run repeatedly — new rows naturally surface.
-- `MastClient.fetch_jwst()` is the same code path the CLI uses; reuse it from worker jobs.
-- The worker skeleton (`services/worker/`) is wired with an RQ entry point but no jobs are scheduled yet.
-
-### Tasks (in build order)
-
-1. **Wire the API ↔ Redis ↔ worker contract.**
-   - Move `services/api/app/services/ingest.py` into `packages/shared/` (or symlink/copy into worker) so both sides import the same code. Easiest first cut: have the worker `pip install -e ../api`.
-   - Add a `webbwatch-api` dep on the worker's pyproject if going that route.
-
-2. **Scheduled MAST polling job.**
-   - Add `services/worker/worker/jobs/mast_poll.py` that calls `MastClient.fetch_jwst()` for a list of configured instruments and runs `ingest_observations()`. Schedule with `rq-scheduler` or a cron sidecar. Default cadence: every 15 min.
-   - Emit one structured log line per run with the `IngestResult` summary so we can chart freshness later.
-
-3. **Anonymous AWS S3 listing job.**
-   - Add `services/worker/worker/jobs/s3_jwst_listing.py` using `boto3` with `botocore.UNSIGNED` config to list `s3://stpubdata/jwst/` prefixes. No AWS account/keys.
-   - Compare results against `data_products.cloud_uri` to detect previously-unseen S3 objects (these can lead reprocessed-product detection ahead of MAST).
-   - Schedule less often than MAST (hourly).
-
-4. **AWS SNS → HTTPS subscription.**
-   - Add `POST /api/webhooks/aws/jwst` to the API. Implement the SNS HTTP subscription handshake (`SubscriptionConfirmation` message type → fetch `SubscribeURL`) and signature verification per AWS docs.
-   - On `Notification` messages, parse the S3 event payload and enqueue an ingestion job.
-   - Initially this stays disabled in production until we have an Azure Container Apps URL to register with AWS SNS.
-
-5. **Watchlists.**
-   - New ORM model `Watchlist(id, user_id, name, criteria_json, enabled, created_at)`. For Phase 2, `user_id` can be a hardcoded "default" string until auth lands in Phase 8.
-   - `criteria_json` schema (see plan §5.B): `{instruments: [], programs: [], targets: [], product_types: [], cone: {ra, dec, radius_arcsec}, keywords: []}`.
-   - Alembic migration; CRUD endpoints under `/api/watchlists`.
-
-6. **Watchlist matching engine.**
-   - New service: `app/services/match.py`. Single function `matches(product, watchlist) -> bool` driven by the criteria JSON.
-   - Hook into `ingest_observations()`: when a product is newly *created*, run all enabled watchlists and emit alerts for matches. Don't re-alert on `updated` rows.
-
-7. **Alerts table + in-app surfacing.**
-   - ORM model `Alert(id, watchlist_id, data_product_id, reason, delivery_status, created_at)`.
-   - `GET /api/alerts?watchlist_id=&unread=true` + a frontend page at `/alerts`.
-
-8. **Delivery adapters.**
-   - Email (Azure Communication Services Email — bonus Azure practice) — gated behind env config so local dev works without it.
-   - Discord webhook (simplest external integration; POST to a URL).
-   - RSS feed: `GET /api/feed.rss` rendering recent alerts (per-watchlist token if we want privacy later).
+- **Cadence**: MAST 30 min, S3 6 h (lighter than the plan default; user-selected).
+- **Delivery**: Discord + in-app feed + RSS. No email — Azure Communication Services deferred.
+- **Auth**: hardcoded `user_id="default"` until Phase 8.
+- **Code sharing**: worker `pip install -e ../api`, no `packages/shared` extraction yet.
 
 ### Architectural calls already made (don't re-litigate)
 
@@ -171,16 +143,9 @@ Goal: detect newly available public JWST products and notify users who care.
 - **JWST SNS → HTTPS endpoint on Azure** rather than AWS SQS — avoids AWS account requirement (plan §3, Azure amendment).
 - **Watchlist criteria as a JSON column**, not a separate criteria table. SQLite + Postgres both support JSON well enough for Phase 2 cardinality.
 
-### Open questions worth asking the user before starting
+### Things deliberately deferred out of Phase 2
 
-- Default poll cadence (15 min for MAST, hourly for S3 sound right?).
-- Email delivery via Azure Communication Services (more Azure practice) or skip email for Phase 2 and only do in-app + Discord?
-- Do we need a real auth user model in Phase 2, or stay with the hardcoded `user_id="default"` until Phase 8?
-- Should the worker get its own copy of the ingest code, or should we extract it into a shared package now? (Pulls forward refactor cost; deferring is fine.)
-
-### Phase 2 done when
-
-- The worker is scheduled, running, and polling MAST without manual intervention.
-- A user can `POST /api/watchlists` with a criteria payload and receive an in-app alert when matching data arrives.
-- At least one delivery adapter (Discord or email) successfully posts on alert creation.
-- New tests cover: watchlist matching logic, the SNS subscription handshake (mocked), and end-to-end "fresh product triggers alert".
+- Real per-watchlist RSS tokens (anyone can hit `/api/feed.rss` today).
+- Acting on SNS `Notification` payloads — the endpoint logs them but doesn't enqueue a targeted MAST poll yet. Will land alongside the registered AWS SNS subscription.
+- Email delivery via Azure Communication Services.
+- The S3 listing job only *detects* unknown keys — it doesn't drive a re-poll yet.

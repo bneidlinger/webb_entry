@@ -47,6 +47,14 @@ class Settings(BaseSettings):
         default="arn:aws:sns:us-east-1:879230861493:stpubdata/jwst"
     )
     jwst_sns_webhook_url: str | None = Field(default=None)
+    # Phase 2: webhook endpoint stays off until we have a public URL registered
+    # with AWS SNS. Verification is independently controllable so local dev can
+    # POST canned payloads against it.
+    jwst_sns_enable: bool = Field(default=False)
+    jwst_sns_verify_signature: bool = Field(default=True)
+
+    # ---- Phase 2: alerts ----
+    discord_webhook_url: str | None = Field(default=None)
 
     # ---- Cloud AI provider ----
     ai_provider: AIProvider = Field(default="openai")

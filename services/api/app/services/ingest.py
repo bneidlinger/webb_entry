@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.clients.mast import MastObservation, MastProduct
 from app.models import DataProduct, Observation
+from app.services.alerts import evaluate_watchlists, load_enabled_watchlists
 
 
 @dataclass
@@ -29,6 +30,7 @@ class IngestResult:
     products_seen: int = 0
     products_created: int = 0
     products_updated: int = 0
+    alerts_created: int = 0
     errors: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict:
@@ -39,6 +41,7 @@ class IngestResult:
             "products_seen": self.products_seen,
             "products_created": self.products_created,
             "products_updated": self.products_updated,
+            "alerts_created": self.alerts_created,
             "errors": self.errors,
         }
 
@@ -86,6 +89,10 @@ def ingest_observations(session: Session, observations: Iterable[MastObservation
     result = IngestResult()
     now = datetime.now(UTC)
 
+    # Watchlists evaluated once per ingest run, against every *newly created*
+    # product. Updates to existing products never re-alert (plan §5.B).
+    watchlists = load_enabled_watchlists(session)
+
     for src_obs in observations:
         result.observations_seen += 1
 
@@ -125,21 +132,24 @@ def ingest_observations(session: Session, observations: Iterable[MastObservation
                 )
             )
             if prod is None:
-                session.add(
-                    DataProduct(
-                        observation_id=obs.id,
-                        mast_product_id=src_prod.mast_product_id,
-                        filename=src_prod.filename,
-                        product_type=src_prod.product_type,
-                        file_extension=src_prod.file_extension,
-                        file_size=src_prod.file_size,
-                        cloud_uri=src_prod.cloud_uri,
-                        mast_download_uri=src_prod.mast_download_uri,
-                        first_seen_at=now,
-                        last_seen_at=now,
-                    )
+                prod = DataProduct(
+                    observation_id=obs.id,
+                    mast_product_id=src_prod.mast_product_id,
+                    filename=src_prod.filename,
+                    product_type=src_prod.product_type,
+                    file_extension=src_prod.file_extension,
+                    file_size=src_prod.file_size,
+                    cloud_uri=src_prod.cloud_uri,
+                    mast_download_uri=src_prod.mast_download_uri,
+                    first_seen_at=now,
+                    last_seen_at=now,
                 )
+                session.add(prod)
+                session.flush()  # need prod.id to FK from Alert
                 result.products_created += 1
+                if watchlists:
+                    new_alerts = evaluate_watchlists(session, prod, obs, watchlists)
+                    result.alerts_created += len(new_alerts)
             elif _apply_product(prod, src_prod, now):
                 result.products_updated += 1
             else:

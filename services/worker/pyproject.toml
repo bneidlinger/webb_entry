@@ -3,9 +3,12 @@ name = "webbwatch-worker"
 version = "0.1.0"
 description = "WebbWatch AI — background workers for FITS ingestion, preview generation, and analysis."
 readme = "README.md"
-requires-python = ">=3.11"
+# Bumped to 3.12 alongside services/api so the worker can `from app import ...`
+# (api uses PEP 695 generics; sharing the same minimum keeps importability clean).
+requires-python = ">=3.12"
 dependencies = [
   "rq>=2.0",
+  "rq-scheduler>=0.14",
   "redis>=5.1",
   "pydantic>=2.9",
   "pydantic-settings>=2.6",
@@ -48,7 +51,7 @@ packages = ["worker"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]

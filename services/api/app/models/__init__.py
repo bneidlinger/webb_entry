@@ -1,5 +1,7 @@
+from app.models.alert import Alert
 from app.models.base import Base
 from app.models.data_product import DataProduct
 from app.models.observation import Observation
+from app.models.watchlist import Watchlist
 
-__all__ = ["Base", "DataProduct", "Observation"]
+__all__ = ["Alert", "Base", "DataProduct", "Observation", "Watchlist"]

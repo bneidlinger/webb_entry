@@ -83,3 +83,52 @@ export async function getProducts(
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
+
+// ---------------------------------------------------------------------------
+// Phase 2: alerts feed
+
+export interface AlertRow {
+  id: number;
+  watchlist_id: number;
+  watchlist_name: string;
+  data_product_id: number;
+  filename: string;
+  product_type: string | null;
+  target_name: string | null;
+  instrument: string | null;
+  program_id: string | null;
+  cloud_uri: string | null;
+  mast_download_uri: string | null;
+  reason: string;
+  delivery_status: Record<string, unknown>;
+  created_at: string;
+  read_at: string | null;
+}
+
+export interface AlertListQuery {
+  watchlistId?: number;
+  unread?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+export async function getAlerts(
+  q: AlertListQuery = {},
+): Promise<Result<Page<AlertRow>>> {
+  const params = new URLSearchParams();
+  if (q.watchlistId != null) params.set("watchlist_id", String(q.watchlistId));
+  if (q.unread != null) params.set("unread", String(q.unread));
+  params.set("limit", String(q.limit ?? 50));
+  params.set("offset", String(q.offset ?? 0));
+
+  try {
+    const res = await fetch(`${API_BASE}/api/alerts?${params.toString()}`, {
+      next: { revalidate: 10 },
+    });
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const data = (await res.json()) as Page<AlertRow>;
+    return { ok: true, data };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
