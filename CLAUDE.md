@@ -8,6 +8,8 @@ Orientation for Claude sessions in this repo. Keep this file tight — it loads 
 
 Source of truth for design decisions: [`webbwatch_ai_project_plan.md`](webbwatch_ai_project_plan.md). Defer to it for the *why*; this file covers *how things are wired right now*.
 
+**Deep context for a fresh session: [`docs/HANDOFF.md`](docs/HANDOFF.md).** Read it before any non-trivial work — it codifies invariants, JWST/MAST domain knowledge, deferred-work rationale, and pitfalls already paid for in past sessions.
+
 GitHub: <https://github.com/bneidlinger/webb_entry>
 
 ## Stack
