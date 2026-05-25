@@ -2,7 +2,7 @@
 
 **Audience.** A Claude (or human engineer) opening this repo cold who needs to be production-effective inside one session. This document complements — does not replace — [`CLAUDE.md`](../CLAUDE.md) (per-session orientation) and [`webbwatch_ai_project_plan.md`](../webbwatch_ai_project_plan.md) (design source of truth). Read this once at the start of any meaningful work; it codifies *why*, *what we know*, and *what we deliberately don't*. Skim in 3 min; deep-read in 10. Length is the price of not repeating mistakes.
 
-**Last updated.** End of Phase 2 (commit `b42024b`, 2026-05-18).
+**Last updated.** End of Phase 3 (2026-05-25).
 
 ---
 
@@ -29,6 +29,9 @@ Each of these is a deliberate, load-bearing decision. Changing one cascades. Bri
 | **Cadence: MAST 30 min, S3 6 h** | User-selected lighter cadence (vs plan default 15/60). JWST releases follow daily-ish science cadences anyway. | `services/worker/worker/config.py`. |
 | **SQLite locally, Postgres in prod, same SQLAlchemy code** | No dialect-conditional model code. JSON columns use `sqlalchemy.JSON` (both backends support it). | `services/api/app/models/`. |
 | **SNS endpoint default-off** | Until we have a public Azure Container Apps URL registered with AWS SNS, the endpoint serves 503 to refuse spoofed traffic. | `services/api/app/routes/webhooks.py:30-32`, `JWST_SNS_ENABLE` env flag. |
+| **Preview-gen orchestration lives in `app.services.preview_job`** (api-side) | Worker is a thin re-export so RQ's dotted path still works, but tests in the api venv can drive `_run()` directly without standing up rq/redis or putting the worker package on sys.path. | `services/api/app/services/preview_job.py`; `services/worker/worker/jobs/preview_gen.py` (5-line shim). |
+| **Previews enqueued only for watchlist-matched products** | User-selected to bound egress (FITS files 10–500 MB, AWS us-east-1 → Azure). All-products mode is a one-line change if Phase 4+ wants it. | `services/api/app/services/ingest.py` near `enqueue_preview_gen(prod.id, ...)`. |
+| **Preview storage backend selected by env, not code change** | `LocalFilesystemStorage` when no Azure connection string is set (writes under `services/api/preview_cache/`, served via `/api/previews/{path}`); `AzureBlobStorage` otherwise. Lets dev work without Docker/Azurite. | `services/api/app/services/storage.py::get_preview_storage`. |
 
 ---
 
@@ -45,14 +48,21 @@ services/api/app/
     base.py                        # Declarative Base + TimestampMixin.
     observation.py, data_product.py  # Phase 1 schema.
     watchlist.py, alert.py          # Phase 2 schema.
+    data_product_preview.py         # Phase 3 schema (one row per (product, variant)).
   clients/mast.py                  # Astroquery wrapper. assemble() is pure.
   services/
-    ingest.py                      # Upsert + alert hook. The hot path.
+    ingest.py                      # Upsert + alert hook + preview enqueue. The hot path.
     match.py                       # Pure function: (product, obs, criteria) -> (bool, reason).
     alerts.py                      # evaluate_watchlists + deliver_pending_alerts.
     delivery/discord.py            # Webhook POST. Env-gated.
     sns.py                         # AWS SNS RSA signature verification.
+    previews.py                    # Pure renderers: image / spectrum / cube → PNG bytes.
+    preview_types.py               # Light: is_supported() + URL extraction. No matplotlib import.
+    preview_job.py                 # Orchestration: fetch → render → upload → persist.
+    storage.py                     # Local fs / Azure Blob backends.
+    queue.py                       # Soft-import rq + best-effort enqueue.
   routes/                          # FastAPI routers, one per resource.
+    previews.py                    # Serves local-fs PNGs at /api/previews/{path}.
   schemas/                         # Pydantic response models.
   cli/                             # Typer subcommands. Entry: python -m app
 
@@ -63,6 +73,7 @@ services/worker/worker/
   jobs/
     mast_poll.py                   # 30-min: walk instruments → ingest → deliver.
     s3_jwst_listing.py             # 6-h: anonymous list, detect unknown keys.
+    preview_gen.py                 # Thin re-export of app.services.preview_job.generate_for_product.
 
 apps/web/
   app/page.tsx, app/alerts/page.tsx  # Server components.
@@ -212,11 +223,19 @@ Schema docs that don't fit in model file docstrings.
 - `read_at` is null until the API's `POST /api/alerts/{id}/read` fires.
 - `reason` is human text constructed by `match.matches()` — surface it in any UI, log line, or webhook payload.
 
+### `data_product_previews` (Phase 3)
+- One row per `(data_product_id, variant)`. Unique constraint enforces it.
+- `variant` is `"full"` or `"thumbnail"` (constants in `app.services.previews`).
+- `storage_uri` is null until rendering succeeds; non-null = the row is usable. Absolute URL for Azure Blob, `http://.../api/previews/{path}` for local fallback.
+- Failure model: `attempts` JSON array records each attempt (`{at, error, permanent}`). `last_error` is the most recent message. `is_permanent_failure=True` makes the job skip this product forever (malformed FITS, missing SCI extension, unsupported type, 404 from S3). Transient failures (network, BotoCoreError) leave it False so a re-enqueue retries.
+- `format` is `"png"` for now; the column exists so JPEG/WebP variants don't need a migration later.
+- `calibration_version` and `crds_context` on `data_products` are populated as a side effect of preview generation (extracted from the primary header) — null only if generation never ran or the header lacked the keys.
+
 ---
 
 ## 6. What's deferred (and why) — read before assuming something is "missing"
 
-Phase 2 explicitly does *not* do these. If you find yourself wanting one, check the rationale before building.
+Through Phase 3 we explicitly do *not* do these. If you find yourself wanting one, check the rationale before building.
 
 - **Per-watchlist RSS tokens.** `/api/feed.rss` is public. Privacy lands with auth in Phase 8.
 - **Acting on SNS Notifications.** Endpoint logs them but doesn't enqueue a targeted poll. Wire-up happens when the AWS subscription is registered.
@@ -224,46 +243,76 @@ Phase 2 explicitly does *not* do these. If you find yourself wanting one, check 
 - **S3 listing → ingest trigger.** The S3 job detects unknown keys but doesn't act on them. Phase 3+ should use this to drive a MAST re-poll for the program containing those keys, not to ingest from S3 directly (MAST has the metadata; S3 doesn't).
 - **Multi-user data isolation.** No `user_id` filtering except watchlist scoping. Alerts table has no `user_id` (it inherits via `watchlist_id`).
 - **Backfill.** Re-polling MAST with a larger `limit` will pull older data, but there's no "ingest everything from program X" CLI yet. Add when needed; the existing ingest function handles arbitrary input.
-- **Calibration metadata.** `calibration_version`, `crds_context` columns exist but aren't populated. Phase 3 will extract from FITS headers as a side effect of preview generation.
 - **Auth.** No user model, no sessions, no API keys. CORS allows `localhost:3000`. The admin endpoint at `/api/admin/*` is unauthenticated — *fix before public deploy*.
+- **Previews for non-watchlist-matched products.** Phase 3 only renders for products that fire an Alert. The deterministic-first vision (plan §7) eventually wants previews for all Level 3 products; switch by removing the `if new_alerts` gate in `ingest_observations`.
+- **Periodic sweep backstop for failed previews.** Transient failures (network, BotoCoreError) get one shot from the ingest enqueue; no scheduled retry runs. Pattern is the same as `mast_poll`: a `worker/jobs/preview_sweep.py` querying `data_product_previews.storage_uri IS NULL AND is_permanent_failure=False`. Skipped because the volume is small while we're watchlist-only.
+- **Spectrum line annotations.** Renderer plots wavelength vs flux as-is. No Hα/[OIII]/PAH overlay markers. A static line list keyed by wavelength range is the obvious next step; redshift-aware annotation needs the observation's `z`, which isn't in our schema yet.
+- **Image stretch presets per instrument.** All imaging uses ZScale + Asinh. MIRI long-wave and NIRCam short-wave actually want different choices — when bias becomes visible, branch on `observation.instrument`.
+- **Cube collapse strategy.** `s3d` cubes are summed along the wavelength axis. Median-collapse and band-selected slices are common alternatives; revisit when an IFU product looks wrong in the UI.
+- **next/image optimization.** Frontend uses `<img>` with eslint-disable. Switching to `next/image` requires adding the API host to `next.config.js`'s `images.domains` (which differs between dev/prod) — defer until image volumes warrant it.
 
 ---
 
-## 7. Phase 3 — preview + spectrum chart generation
+## 7. Phase 3 — preview + spectrum chart generation (shipped, retained for reference)
 
-The next planned phase. This section exists so you can start design conversation with full context rather than discovery.
+### 7.1 What landed
 
-### 7.1 What it must produce
+1. **Image previews** for `i2d`, `s2d`, `cal`: PNG, max-dim 512 (full) / 128 (thumbnail), ZScale + Asinh. Greyscale, north-up. PIL.thumbnail-driven — small inputs preserve native size (never upscales).
+2. **Spectrum charts** for `x1d`, `c1d`: PNG, 800×400 (full) / 256×128 (thumbnail). Matplotlib line plot with wavelength + flux units pulled from `TUNIT*` headers.
+3. **Cube previews** for `s3d`: same renderer as imaging, fed a wavelength-axis `nansum` collapse.
+4. **Calibration metadata** populated as a side effect: `calibration_version` from `CAL_VER`/`CAL_VCS`/`CALVER`; `crds_context` from `CRDS_CTX`/`CRDSCTX`/`PMAP`. Never overwrites a pre-populated value.
 
-1. **Image previews** for `i2d`, `s2d` products: PNG, ~512×512, ZScale + Asinh stretch. Display-grade, not science-grade.
-2. **Spectrum charts** for `x1d`, `c1d`, `s3d` (collapsed): PNG, wavelength axis labeled with units. Optionally with key emission/absorption line annotations.
-3. **Thumbnails** for the feed (smaller, ~128×128) and full previews for the detail view.
-4. **Metadata extraction** as a side effect: populate `calibration_version`, `crds_context` from primary header.
+### 7.2 How it's wired
 
-### 7.2 Architectural shape
+- New ORM model `DataProductPreview` (one row per `(data_product_id, variant)`). Migration `c471d6cc58ae`. Failure model: `attempts` JSON + `last_error` + `is_permanent_failure` flag.
+- `app/services/previews.py` — pure renderers + S3 fetch. `Preview` dataclass, `PreviewError(is_permanent: bool)`.
+- `app/services/preview_job.py` — orchestration (`generate_for_product`, `_run`). Idempotent; skips variants whose row already has a `storage_uri`. Permanent failures mark the product and never retry.
+- `app/services/storage.py` — `LocalFilesystemStorage` writes under `services/api/preview_cache/` and returns `{api_public_url}/api/previews/{key}`; `AzureBlobStorage` activates when an Azure connection string or account URL is set. Selection in `get_preview_storage(settings)`.
+- `app/services/queue.py::enqueue_preview_gen(product_id, product_type)` soft-imports rq+redis, pings, and returns False on any failure. `ingest_observations` calls it for *newly created* products that fire an Alert (and are eligible — `is_supported(product_type)`).
+- `worker/jobs/preview_gen.py` is a 5-line re-export so the RQ string `worker.jobs.preview_gen.generate_for_product` still resolves to the API-side orchestration.
+- API: `ProductRow`, `DataProductRead`, `AlertRead` carry `thumbnail_url` + `preview_url`. New `/api/previews/{path}` route serves the local fallback (404s when Azure is configured — that path returns absolute blob URLs directly).
+- Frontend: product feed got a Preview column; alert cards a 14×14 thumbnail. Both link to the full preview when present.
 
-- New worker job: `services/worker/worker/jobs/preview_gen.py`.
-- Triggered: (a) inline from `ingest_observations` for newly-created Level 3 products (best path — keeps preview latency low), or (b) periodic sweep for products lacking a preview (catches failures). Pick (a) primarily, (b) as backstop.
-- Output: PNG bytes uploaded to Azure Blob (`webbwatch-previews` container, already provisioned in compose). URL stored in a new `data_product_previews` table or as columns on `data_products` (decide based on how many preview variants you need).
-- FITS fetch: boto3 anonymous `get_object()` against `s3://stpubdata/jwst/...`. Don't download to local disk — stream into `astropy.io.fits.open(io.BytesIO(...))`.
+### 7.3 Decisions baked in (don't re-litigate — see issue notes if changing)
 
-### 7.3 Open design questions for Phase 3
+| Question | Choice | Why |
+|---|---|---|
+| Sync vs async generation | Async via RQ `analyze` queue | Latency-isolated from MAST polls; failed renders don't break ingest |
+| Storage schema | New `data_product_previews` table, one row per (product, variant) | Variant explosion (thumb, full, future jpg/webp) without column churn |
+| Trigger scope | Only watchlist-matched products | User-selected. Caps egress while we don't have a CDN. One-line change to broaden. |
+| Local dev backend | Filesystem fallback under `preview_cache/` | Docker still not installed; unblocks dev today, swaps to Azure when conn string is set |
+| Image stretch | ZScale + Asinh, greyscale | Matches JWST QuickLook / jdaviz defaults. Per-instrument tuning deferred. |
+| Cube collapse | `nansum` along spectral axis | Cheapest "show something useful"; median/band-slice are obvious next steps |
+| Spectrum annotations | None | Static line list (Hα, [OIII], PAH) is the obvious next step; redshift-aware needs an `obs.z` we don't have |
+| Failure retry | Permanent flag + JSON attempts log; no scheduled sweep | Volume is small while watchlist-only. Sweep is a 30-line `worker/jobs/preview_sweep.py` when needed. |
 
-Resolve these *before* writing code:
+### 7.4 What we intentionally do *not* do
 
-1. **Preview generation: synchronous on ingest or async via queue?** Synchronous adds latency to MAST polls but keeps the data path simple. Async needs a separate job + retry policy. Recommend: enqueue from ingest, run async — that's why we have RQ.
-2. **Preview storage schema.** One row per (product, variant) in a new table, or a JSON column on `data_products`? New table is more flexible (multiple sizes, regenerations, formats) but more migration work. Start with new table.
-3. **Stretch + colormap selection per instrument.** NIRCam imaging looks good with greyscale/viridis; MIRI long-wave needs different stretches; IFU cubes need a wavelength-collapse strategy. Either pick reasonable defaults per (`instrument`, `product_type`) or accept that initial output is "good enough, refine later."
-4. **Spectrum line annotation.** Identify which emission/absorption features are visible based on wavelength range + redshift (when known). This is *quick* with a static line list (Hα, [OIII], Lyα, PAH bands) and *real* with NIST line databases. Start static.
-5. **Failure handling.** FITS files can be malformed, headers can be unexpected, S3 fetches can timeout. Distinguish "this product can't preview, ever" (mark on row, don't retry) from "transient failure" (retry with backoff). Use `Alert.delivery_status` pattern: a JSON column tracking attempts.
-6. **Egress cost.** FITS files are 10-500 MB. Pulling thousands per day from `us-east-1` to Azure (different region) is non-trivial bandwidth. Consider: only generate previews for products matching a watchlist? Or all Level 3 products? Trade-off between completeness and cost.
+- We don't generate science-grade products. The JWST calibration pipeline does that; we display its output.
+- We don't run the JWST calibration pipeline. Ever.
+- We don't write to `s3://stpubdata/`. Read-only.
+- We don't cache FITS files locally beyond a single job execution. Storage cost dwarfs re-fetch cost; egress is the limiting resource and we're already bounded by the watchlist gate.
 
-### 7.4 What *not* to do in Phase 3
+---
 
-- Don't try to generate science-grade products. The pipeline does that; we display.
-- Don't run the JWST calibration pipeline. We consume its output, never reproduce it.
-- Don't write to `s3://stpubdata/` — read-only.
-- Don't cache the FITS files locally beyond a single job execution. Storage cost dwarfs re-fetch cost.
+## 7b. Phase 4 — deterministic analysis engine (next)
+
+Plan reference: §11 Phase 4. Goal: produce *measured facts* (pixel stats, background, peak detection, S/N proxy) before any AI inference touches them. Persisted as a JSON payload keyed by `(data_product_id, analyzer_name, analyzer_version)` so re-runs don't shadow old measurements.
+
+Likely shape (subject to scope conversation):
+
+- New module `app/services/analysis/` with `ImageAnalyzer`, `SpectrumAnalyzer`, `CubeAnalyzer` interfaces.
+- New table `data_product_analyses(id, data_product_id, analyzer_name, version, measurements_json, generated_at)`.
+- Triggered the same way previews are: enqueue on watchlist match from `ingest_observations`. Same queue (`analyze`) or its own?
+- Output surfaced on a per-product detail page (which doesn't exist yet — Phase 4 should add it).
+- `photutils` optional dep is already declared in the worker pyproject for source detection; activate when needed.
+
+Open questions to resolve before coding (parallel to §7.3):
+
+1. **Analyzer registry vs. hardcoded dispatch?** Plugin-style registry is over-engineered while N=3. Hardcode for now.
+2. **Run during preview-gen or as a separate job?** Sharing the FITS fetch is tempting (already paid the egress). But analysis is CPU-bound and previews are I/O-bound — separate jobs gives clearer scheduling. Probably: extend `preview_job._run` to optionally produce analysis output, OR a new `analysis_job.py` that takes the same approach.
+3. **Reproducibility metadata.** Store the `crds_context`, `calibration_version`, analyzer-package-version with each measurement so a re-run with a newer pipeline can be diffed.
+4. **What's the public surface?** `/api/products/{id}/analysis` returning the JSON? Or embed in the existing product detail response?
 
 ---
 
@@ -324,6 +373,16 @@ Things that already cost us debugging time. Read this before re-falling into the
 9. **Don't put real secrets in `.env.example`.** GitHub push protection blocks even false-positive matches like the Azurite well-known dev key (which is documented public). Use `UseDevelopmentStorage=true` instead of the literal connection string.
 
 10. **`pip install -e ../api` must happen before `pip install -e .` in the worker** — otherwise the worker's resolver hasn't seen `webbwatch-api` and will fail to import `app.*` at job runtime.
+
+11. **`PIL.Image.thumbnail()` never upscales.** Pass a 64×80 array and ask for 512×512; you get 64×80 back. The image renderer is correct (preserves aspect, doesn't fabricate detail) — but tests that assert `max(width, height) == IMAGE_FULL_DIM` need synthetic inputs *larger* than the clamp dim, otherwise they'll fail.
+
+12. **`pathlib.Path.is_absolute()` is platform-conditional.** `Path("/abs/path").is_absolute()` returns False on Windows because there's no drive letter. A traversal guard that only relies on `is_absolute()` will let POSIX-style absolute paths through on Windows. `storage._safe_relative_key` has an explicit `startswith(("/", "\\"))` check in front for that reason — don't remove it.
+
+13. **`app.services.previews` transitively imports matplotlib + numpy + PIL.** That's fine for the worker and preview job, but the hot path (ingest) shouldn't pay that cost just to check eligibility. Lightweight checks live in `app.services.preview_types` (no matplotlib import); import from there in `ingest.py` or `routes/products.py`.
+
+14. **ESLint `@next/next/no-img-element` only suppresses the immediately-following line.** A multi-line `<img ...>` JSX block won't be silenced by `// eslint-disable-next-line` placed before the variable declaration. Collapse to `const img = <img ... />;` on one line, or use `{/* eslint-disable-next-line ... */}` inside JSX.
+
+15. **The worker's `preview_gen.py` is intentionally trivial.** The orchestration lives in `app.services.preview_job` so tests in the api venv can drive `_run()` directly without standing up rq/redis. If you're adding logic to "the worker job," you're probably looking in the wrong file — edit `preview_job.py` instead.
 
 ---
 

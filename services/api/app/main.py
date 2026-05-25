@@ -4,7 +4,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routes import admin, alerts, health, observations, products, watchlists, webhooks
+from app.routes import (
+    admin,
+    alerts,
+    health,
+    observations,
+    previews,
+    products,
+    watchlists,
+    webhooks,
+)
 
 
 @asynccontextmanager
@@ -30,6 +39,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(observations.router)
     app.include_router(products.router)
+    app.include_router(previews.router)
     app.include_router(watchlists.router)
     app.include_router(alerts.router)
     app.include_router(webhooks.router)

@@ -100,7 +100,7 @@ These are decisions already made; follow them unless there's a real reason to ch
 - **Commits**: one commit per phase or per cohesive change. Conventional-ish ("Phase N: ..." or "<area>: ..."). Co-author trailer for AI assistance. No `--no-verify`, no `--amend` on pushed commits.
 - **Secrets**: never put real secrets in `.env.example`. GitHub push protection is on; even false-positive matches (like the Azurite well-known dev key) get blocked. Use `UseDevelopmentStorage=true` for Azurite.
 
-## State (2026-05-18)
+## State (2026-05-25)
 
 **Phase 0 — scaffold** ✓ shipped (`commit 22223f3`)
 - Monorepo, Next.js 15 + Tailwind, FastAPI with `/health`, RQ worker skeleton, Azurite/Postgres/Redis in compose, GitHub Actions CI, `CloudAIProvider` interface with OpenAI + Azure OpenAI adapters.
@@ -122,10 +122,16 @@ These are decisions already made; follow them unless there's a real reason to ch
 - Frontend: new `/alerts` page with cards per match + delivery-status badge; home page links to it.
 - Tests (31 new): matching matrix, alert emission e2e, SNS handshake + signature gating, watchlist CRUD, alerts feed + RSS. 39 total, all pass.
 
-**Phase 3 — preview + spectrum chart generation** ← *next*
-- Workers fetch FITS from S3 (anonymous), generate PNG previews + spectrum charts via astropy + matplotlib, upload to Azure Blob (Azurite locally).
-- Surface previews in the product feed + per-alert cards.
-- See [plan §6](webbwatch_ai_project_plan.md).
+**Phase 3 — preview + spectrum chart generation** ✓ shipped
+- New ORM model `DataProductPreview` (one row per (product, variant)), unique on `(data_product_id, variant)`. Migration `c471d6cc58ae`. Side-effect: `calibration_version` + `crds_context` get populated from FITS primary header during generation.
+- `app/services/previews.py` — pure renderers: image (ZScale + Asinh) for i2d/s2d/cal, line plot for x1d/c1d, wavelength-collapsed image for s3d. `Preview` dataclass + `PreviewError(is_permanent)`. Synthetic-FITS unit tests.
+- `app/services/storage.py` — `LocalFilesystemStorage` (default, writes under `services/api/preview_cache/`, served via new `/api/previews/{path}` route) and `AzureBlobStorage` (activates when `AZURE_STORAGE_CONNECTION_STRING` or `AZURE_STORAGE_ACCOUNT_URL` set). Path traversal blocked.
+- `app/services/preview_job.py` — orchestration: fetch → open → extract metadata → render each missing variant → upload → persist. Idempotent. `worker/jobs/preview_gen.py` is a thin re-export so the RQ string `worker.jobs.preview_gen.generate_for_product` still resolves.
+- `app/services/queue.py` — soft-imports rq/redis, returns False if Redis unreachable (CLI mode). `ingest_observations` enqueues only for *watchlist-matched* newly-created products (user choice, HANDOFF §7.3-6 egress trade-off). `IngestResult` gains `previews_enqueued`.
+- API: `ProductRow`, `DataProductRead`, `AlertRead` schemas + their routes return `thumbnail_url` + `preview_url`. New `previews` route serves the local fallback.
+- API deps gained `matplotlib`, `pillow`, `numpy`, `boto3`, `botocore` (preview_job lives api-side for testability).
+- Frontend: product feed has a Preview column; alert cards have a thumbnail. Both link to the full preview when present.
+- Tests (48 new, 87 total): renderer unit tests with synthetic HDULists; storage backend selection + traversal-safety; ingest enqueue gating; full `_run()` integration with mocked S3 + tmp filesystem.
 
 **Phases 4–8** see [plan §11](webbwatch_ai_project_plan.md).
 

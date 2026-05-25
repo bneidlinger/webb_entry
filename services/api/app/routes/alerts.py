@@ -13,6 +13,7 @@ from app.db import get_session
 from app.models import Alert, DataProduct, Observation, Watchlist
 from app.schemas.alert import AlertRead
 from app.schemas.observation import Page
+from app.services.preview_types import preview_urls_from
 
 router = APIRouter(prefix="/api", tags=["alerts"])
 
@@ -20,6 +21,7 @@ router = APIRouter(prefix="/api", tags=["alerts"])
 def _row_to_alert_read(
     alert: Alert, wl: Watchlist, prod: DataProduct, obs: Observation
 ) -> AlertRead:
+    thumb, full = preview_urls_from(prod.previews)
     return AlertRead(
         id=alert.id,
         watchlist_id=wl.id,
@@ -36,6 +38,8 @@ def _row_to_alert_read(
         delivery_status=alert.delivery_status,
         created_at=alert.created_at,
         read_at=alert.read_at,
+        thumbnail_url=thumb,
+        preview_url=full,
     )
 
 

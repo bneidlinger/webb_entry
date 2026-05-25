@@ -25,3 +25,5 @@ class AlertRead(BaseModel):
     delivery_status: dict[str, Any]
     created_at: datetime
     read_at: datetime | None
+    thumbnail_url: str | None = None
+    preview_url: str | None = None

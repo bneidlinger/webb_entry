@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.db import get_session
 from app.models import DataProduct, Observation
 from app.schemas.observation import DataProductRead, Page, ProductRow
+from app.services.preview_types import preview_urls_from
 
 router = APIRouter(prefix="/api/products", tags=["products"])
 
@@ -52,25 +53,29 @@ def list_products(
         .offset(offset)
     ).all()
 
-    items = [
-        ProductRow(
-            id=prod.id,
-            filename=prod.filename,
-            product_type=prod.product_type,
-            file_size=prod.file_size,
-            cloud_uri=prod.cloud_uri,
-            mast_download_uri=prod.mast_download_uri,
-            observation_id=obs.id,
-            mast_obs_id=obs.mast_obs_id,
-            target_name=obs.target_name,
-            instrument=obs.instrument,
-            filters=obs.filters,
-            program_id=obs.program_id,
-            observation_date=obs.observation_date,
-            public_release_date=obs.public_release_date,
+    items = []
+    for prod, obs in rows:
+        thumb, full = preview_urls_from(prod.previews)
+        items.append(
+            ProductRow(
+                id=prod.id,
+                filename=prod.filename,
+                product_type=prod.product_type,
+                file_size=prod.file_size,
+                cloud_uri=prod.cloud_uri,
+                mast_download_uri=prod.mast_download_uri,
+                observation_id=obs.id,
+                mast_obs_id=obs.mast_obs_id,
+                target_name=obs.target_name,
+                instrument=obs.instrument,
+                filters=obs.filters,
+                program_id=obs.program_id,
+                observation_date=obs.observation_date,
+                public_release_date=obs.public_release_date,
+                thumbnail_url=thumb,
+                preview_url=full,
+            )
         )
-        for prod, obs in rows
-    ]
     return Page[ProductRow](items=items, total=total, limit=limit, offset=offset)
 
 
@@ -82,4 +87,8 @@ def get_product(
     prod = session.get(DataProduct, product_id)
     if prod is None:
         raise HTTPException(status_code=404, detail="product not found")
-    return DataProductRead.model_validate(prod)
+    thumb, full = preview_urls_from(prod.previews)
+    result = DataProductRead.model_validate(prod)
+    result.thumbnail_url = thumb
+    result.preview_url = full
+    return result

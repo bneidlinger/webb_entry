@@ -9,6 +9,36 @@ function formatDate(iso: string | null): string {
   }
 }
 
+function AlertThumb({
+  thumbnail,
+  full,
+  alt,
+}: {
+  thumbnail: string | null;
+  full: string | null;
+  alt: string;
+}) {
+  if (!thumbnail && !full) {
+    return (
+      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded border border-dashed border-webb-star/15 text-[9px] text-webb-star/30">
+        no preview
+      </div>
+    );
+  }
+  const src = thumbnail ?? full ?? "";
+  const cls = "h-14 w-14 shrink-0 rounded border border-webb-star/10 bg-black object-cover";
+  // eslint-disable-next-line @next/next/no-img-element
+  const img = <img src={src} alt={alt} className={cls} loading="lazy" />;
+  if (full) {
+    return (
+      <a href={full} target="_blank" rel="noreferrer" title="Open full preview">
+        {img}
+      </a>
+    );
+  }
+  return img;
+}
+
 function StatusBadge({ status }: { status: AlertRow["delivery_status"] }) {
   const discord = (status?.discord as { status?: string } | undefined)?.status;
   if (!discord) {
@@ -74,23 +104,30 @@ export async function AlertFeed() {
       <ul className="divide-y divide-webb-star/5">
         {result.data.items.map((a: AlertRow) => (
           <li key={a.id} className="px-4 py-3 hover:bg-webb-deep/40">
-            <div className="flex items-baseline justify-between gap-4">
-              <div className="min-w-0">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-sm font-medium text-webb-star">{a.watchlist_name}</span>
-                  <span className="text-xs text-webb-star/40">→</span>
-                  <span className="truncate font-mono text-xs text-webb-star/70">{a.filename}</span>
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex min-w-0 items-start gap-3">
+                <AlertThumb
+                  thumbnail={a.thumbnail_url}
+                  full={a.preview_url}
+                  alt={a.filename}
+                />
+                <div className="min-w-0">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-sm font-medium text-webb-star">{a.watchlist_name}</span>
+                    <span className="text-xs text-webb-star/40">→</span>
+                    <span className="truncate font-mono text-xs text-webb-star/70">{a.filename}</span>
+                  </div>
+                  <div className="mt-1 text-xs text-webb-star/60">
+                    <span className="text-webb-star/80">{a.target_name ?? "?"}</span>
+                    <span className="text-webb-star/30"> · </span>
+                    {a.instrument ?? "?"}
+                    <span className="text-webb-star/30"> · </span>
+                    program {a.program_id ?? "?"}
+                    <span className="text-webb-star/30"> · </span>
+                    type {a.product_type ?? "?"}
+                  </div>
+                  <div className="mt-1 text-xs text-webb-accent">matched: {a.reason}</div>
                 </div>
-                <div className="mt-1 text-xs text-webb-star/60">
-                  <span className="text-webb-star/80">{a.target_name ?? "?"}</span>
-                  <span className="text-webb-star/30"> · </span>
-                  {a.instrument ?? "?"}
-                  <span className="text-webb-star/30"> · </span>
-                  program {a.program_id ?? "?"}
-                  <span className="text-webb-star/30"> · </span>
-                  type {a.product_type ?? "?"}
-                </div>
-                <div className="mt-1 text-xs text-webb-accent">matched: {a.reason}</div>
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1">
                 <StatusBadge status={a.delivery_status} />

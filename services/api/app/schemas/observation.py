@@ -18,6 +18,8 @@ class DataProductRead(BaseModel):
     mast_download_uri: str | None
     first_seen_at: datetime | None
     last_seen_at: datetime | None
+    thumbnail_url: str | None = None
+    preview_url: str | None = None
 
 
 class ObservationRead(BaseModel):
@@ -59,6 +61,8 @@ class ProductRow(BaseModel):
     program_id: str | None
     observation_date: datetime | None
     public_release_date: datetime | None
+    thumbnail_url: str | None = None
+    preview_url: str | None = None
 
 
 class Page[T](BaseModel):

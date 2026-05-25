@@ -63,6 +63,7 @@ tmp/
 *.db-journal
 *.db-wal
 *.db-shm
+preview_cache/
 
 # ---- Logs ----
 logs/

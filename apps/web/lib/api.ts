@@ -40,6 +40,8 @@ export interface ProductRow {
   program_id: string | null;
   observation_date: string | null;
   public_release_date: string | null;
+  thumbnail_url: string | null;
+  preview_url: string | null;
 }
 
 export interface Page<T> {
@@ -103,6 +105,8 @@ export interface AlertRow {
   delivery_status: Record<string, unknown>;
   created_at: string;
   read_at: string | null;
+  thumbnail_url: string | null;
+  preview_url: string | null;
 }
 
 export interface AlertListQuery {

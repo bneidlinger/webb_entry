@@ -17,6 +17,36 @@ function formatDate(iso: string | null): string {
   }
 }
 
+function PreviewThumb({
+  thumbnail,
+  full,
+  alt,
+}: {
+  thumbnail: string | null;
+  full: string | null;
+  alt: string;
+}) {
+  if (!thumbnail && !full) {
+    return (
+      <div className="flex h-12 w-12 items-center justify-center rounded border border-dashed border-webb-star/15 text-[9px] text-webb-star/30">
+        —
+      </div>
+    );
+  }
+  const src = thumbnail ?? full ?? "";
+  const cls = "h-12 w-12 rounded border border-webb-star/10 bg-black object-cover";
+  // eslint-disable-next-line @next/next/no-img-element
+  const img = <img src={src} alt={alt} className={cls} loading="lazy" />;
+  if (full) {
+    return (
+      <a href={full} target="_blank" rel="noreferrer" title="Open full preview">
+        {img}
+      </a>
+    );
+  }
+  return img;
+}
+
 function ProductTypeBadge({ type }: { type: string | null }) {
   if (!type) return <span className="text-webb-star/40">—</span>;
   const tones: Record<string, string> = {
@@ -76,6 +106,7 @@ export async function ProductFeed() {
       <table className="w-full text-left text-sm">
         <thead className="bg-webb-deep/60 text-xs uppercase tracking-wider text-webb-star/50">
           <tr>
+            <th className="px-4 py-2">Preview</th>
             <th className="px-4 py-2">Type</th>
             <th className="px-4 py-2">Target</th>
             <th className="px-4 py-2">Instrument</th>
@@ -89,6 +120,13 @@ export async function ProductFeed() {
         <tbody>
           {result.data.items.map((p: ProductRow) => (
             <tr key={p.id} className="border-t border-webb-star/5 hover:bg-webb-deep/40">
+              <td className="px-4 py-2">
+                <PreviewThumb
+                  thumbnail={p.thumbnail_url}
+                  full={p.preview_url}
+                  alt={p.filename}
+                />
+              </td>
               <td className="px-4 py-2"><ProductTypeBadge type={p.product_type} /></td>
               <td className="px-4 py-2 text-webb-star">{p.target_name ?? "—"}</td>
               <td className="px-4 py-2 text-webb-star/70">{p.instrument ?? "—"}</td>

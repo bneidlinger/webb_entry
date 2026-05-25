@@ -28,6 +28,13 @@ dependencies = [
   "astroquery>=0.4.7",
   # SNS signature verification (X.509 cert + RSA verify)
   "cryptography>=43.0",
+  # Phase 3: preview rendering (worker delegates to app.services.preview_job)
+  "matplotlib>=3.9",
+  "pillow>=10.4",
+  "numpy>=2.0",
+  # Phase 3: anonymous S3 reads from AWS Open Data (stpubdata/jwst)
+  "boto3>=1.35",
+  "botocore>=1.35",
 ]
 
 [project.optional-dependencies]
