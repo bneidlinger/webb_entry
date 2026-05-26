@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { getAlerts, type AlertRow } from "@/lib/api";
 
 function formatDate(iso: string | null): string {
@@ -115,7 +117,12 @@ export async function AlertFeed() {
                   <div className="flex items-baseline gap-2">
                     <span className="text-sm font-medium text-webb-star">{a.watchlist_name}</span>
                     <span className="text-xs text-webb-star/40">→</span>
-                    <span className="truncate font-mono text-xs text-webb-star/70">{a.filename}</span>
+                    <Link
+                      href={`/products/${a.data_product_id}`}
+                      className="truncate font-mono text-xs text-webb-star/70 hover:text-webb-accent"
+                    >
+                      {a.filename}
+                    </Link>
                   </div>
                   <div className="mt-1 text-xs text-webb-star/60">
                     <span className="text-webb-star/80">{a.target_name ?? "?"}</span>

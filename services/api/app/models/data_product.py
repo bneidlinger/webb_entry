@@ -23,6 +23,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
+    from app.models.data_product_analysis import DataProductAnalysis
     from app.models.data_product_preview import DataProductPreview
     from app.models.observation import Observation
 
@@ -58,6 +59,10 @@ class DataProduct(Base, TimestampMixin):
 
     observation: Mapped[Observation] = relationship(back_populates="data_products")
     previews: Mapped[list[DataProductPreview]] = relationship(
+        back_populates="data_product",
+        cascade="all, delete-orphan",
+    )
+    analyses: Mapped[list[DataProductAnalysis]] = relationship(
         back_populates="data_product",
         cascade="all, delete-orphan",
     )

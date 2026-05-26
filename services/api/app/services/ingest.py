@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from app.clients.mast import MastObservation, MastProduct
 from app.models import DataProduct, Observation
 from app.services.alerts import evaluate_watchlists, load_enabled_watchlists
-from app.services.queue import enqueue_preview_gen
+from app.services.queue import enqueue_analyze_product, enqueue_preview_gen
 
 
 @dataclass
@@ -33,6 +33,7 @@ class IngestResult:
     products_updated: int = 0
     alerts_created: int = 0
     previews_enqueued: int = 0
+    analyses_enqueued: int = 0
     errors: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict:
@@ -45,6 +46,7 @@ class IngestResult:
             "products_updated": self.products_updated,
             "alerts_created": self.alerts_created,
             "previews_enqueued": self.previews_enqueued,
+            "analyses_enqueued": self.analyses_enqueued,
             "errors": self.errors,
         }
 
@@ -153,10 +155,13 @@ def ingest_observations(session: Session, observations: Iterable[MastObservation
                 if watchlists:
                     new_alerts = evaluate_watchlists(session, prod, obs, watchlists)
                     result.alerts_created += len(new_alerts)
-                    # Phase 3: only enqueue previews for watchlist-matched products
-                    # (selected by user — see HANDOFF §7.3-6 egress trade-off).
-                    if new_alerts and enqueue_preview_gen(prod.id, prod.product_type):
-                        result.previews_enqueued += 1
+                    # Phase 3/4: only enqueue previews + analyses for watchlist-matched
+                    # products (selected by user — see HANDOFF §7.3-6 egress trade-off).
+                    if new_alerts:
+                        if enqueue_preview_gen(prod.id, prod.product_type):
+                            result.previews_enqueued += 1
+                        if enqueue_analyze_product(prod.id, prod.product_type):
+                            result.analyses_enqueued += 1
             elif _apply_product(prod, src_prod, now):
                 result.products_updated += 1
             else:

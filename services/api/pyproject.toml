@@ -35,6 +35,8 @@ dependencies = [
   # Phase 3: anonymous S3 reads from AWS Open Data (stpubdata/jwst)
   "boto3>=1.35",
   "botocore>=1.35",
+  # Phase 4: deterministic analysis (signal.find_peaks for spectra, ndimage.label for image source count)
+  "scipy>=1.14",
 ]
 
 [project.optional-dependencies]

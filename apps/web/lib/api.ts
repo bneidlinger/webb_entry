@@ -136,3 +136,58 @@ export async function getAlerts(
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
+
+// ---------------------------------------------------------------------------
+// Phase 4: product detail + deterministic analysis
+
+export interface DataProductRead {
+  id: number;
+  mast_product_id: string | null;
+  filename: string;
+  product_type: string | null;
+  file_extension: string | null;
+  file_size: number | null;
+  cloud_uri: string | null;
+  mast_download_uri: string | null;
+  first_seen_at: string | null;
+  last_seen_at: string | null;
+  thumbnail_url: string | null;
+  preview_url: string | null;
+}
+
+export interface AnalysisRead {
+  id: number;
+  data_product_id: number;
+  analyzer_name: string;
+  analyzer_version: string;
+  measurements_json: Record<string, unknown> | null;
+  generated_at: string | null;
+  last_error: string | null;
+  is_permanent_failure: boolean;
+}
+
+export async function getProduct(id: number): Promise<Result<DataProductRead>> {
+  try {
+    const res = await fetch(`${API_BASE}/api/products/${id}`, {
+      next: { revalidate: 30 },
+    });
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const data = (await res.json()) as DataProductRead;
+    return { ok: true, data };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+export async function getProductAnalyses(id: number): Promise<Result<AnalysisRead[]>> {
+  try {
+    const res = await fetch(`${API_BASE}/api/products/${id}/analysis`, {
+      next: { revalidate: 30 },
+    });
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const data = (await res.json()) as AnalysisRead[];
+    return { ok: true, data };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}

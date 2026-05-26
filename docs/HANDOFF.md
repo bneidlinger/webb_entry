@@ -2,7 +2,7 @@
 
 **Audience.** A Claude (or human engineer) opening this repo cold who needs to be production-effective inside one session. This document complements — does not replace — [`CLAUDE.md`](../CLAUDE.md) (per-session orientation) and [`webbwatch_ai_project_plan.md`](../webbwatch_ai_project_plan.md) (design source of truth). Read this once at the start of any meaningful work; it codifies *why*, *what we know*, and *what we deliberately don't*. Skim in 3 min; deep-read in 10. Length is the price of not repeating mistakes.
 
-**Last updated.** End of Phase 3 (2026-05-25).
+**Last updated.** End of Phase 4 (2026-05-25).
 
 ---
 
@@ -32,6 +32,10 @@ Each of these is a deliberate, load-bearing decision. Changing one cascades. Bri
 | **Preview-gen orchestration lives in `app.services.preview_job`** (api-side) | Worker is a thin re-export so RQ's dotted path still works, but tests in the api venv can drive `_run()` directly without standing up rq/redis or putting the worker package on sys.path. | `services/api/app/services/preview_job.py`; `services/worker/worker/jobs/preview_gen.py` (5-line shim). |
 | **Previews enqueued only for watchlist-matched products** | User-selected to bound egress (FITS files 10–500 MB, AWS us-east-1 → Azure). All-products mode is a one-line change if Phase 4+ wants it. | `services/api/app/services/ingest.py` near `enqueue_preview_gen(prod.id, ...)`. |
 | **Preview storage backend selected by env, not code change** | `LocalFilesystemStorage` when no Azure connection string is set (writes under `services/api/preview_cache/`, served via `/api/previews/{path}`); `AzureBlobStorage` otherwise. Lets dev work without Docker/Azurite. | `services/api/app/services/storage.py::get_preview_storage`. |
+| **Analyses enqueued under the same gate as previews** | Same egress trade-off. Analyses are CPU-bound after fetch, so they re-pay the S3 cost rather than coupling to preview_job — clearer scheduling, separate retry semantics. | `services/api/app/services/ingest.py` near `enqueue_analyze_product(prod.id, ...)`. |
+| **Analyzer dispatch is hardcoded; no plugin registry** | N=2 (image + spectrum). A registry adds indirection for hypothetical future analyzers we don't have requirements for. Cube (s3d) returns None from the dispatcher → job-layer skip. | `services/api/app/services/analysis/__init__.py::get_analyzer_for`. |
+| **Reproducibility metadata lives inside `measurements_json`** | scipy/numpy/astropy versions + crds_context + calibration_version under `measurements_json["meta"]`. Keeps schema stable while letting future re-runs diff against past ones. | `services/api/app/services/analysis_job.py::_build_meta`. |
+| **Version bumps preserve history; same-version re-runs overwrite** | Unique constraint on `(data_product_id, analyzer_name, analyzer_version)`. Re-running v1 is a no-op; bumping the analyzer to v2 creates a new row alongside v1 for diffing. API returns only the latest per analyzer name. | `services/api/app/models/data_product_analysis.py`; `services/api/app/routes/analyses.py`. |
 
 ---
 
@@ -49,9 +53,10 @@ services/api/app/
     observation.py, data_product.py  # Phase 1 schema.
     watchlist.py, alert.py          # Phase 2 schema.
     data_product_preview.py         # Phase 3 schema (one row per (product, variant)).
+    data_product_analysis.py        # Phase 4 schema (one row per (product, analyzer, version)).
   clients/mast.py                  # Astroquery wrapper. assemble() is pure.
   services/
-    ingest.py                      # Upsert + alert hook + preview enqueue. The hot path.
+    ingest.py                      # Upsert + alert hook + preview/analysis enqueue. The hot path.
     match.py                       # Pure function: (product, obs, criteria) -> (bool, reason).
     alerts.py                      # evaluate_watchlists + deliver_pending_alerts.
     delivery/discord.py            # Webhook POST. Env-gated.
@@ -59,10 +64,18 @@ services/api/app/
     previews.py                    # Pure renderers: image / spectrum / cube → PNG bytes.
     preview_types.py               # Light: is_supported() + URL extraction. No matplotlib import.
     preview_job.py                 # Orchestration: fetch → render → upload → persist.
+    analysis/                      # Phase 4: pure analyzers + dispatch.
+      base.py                      # Analyzer protocol, AnalysisResult, AnalysisError.
+      image.py                     # ImageAnalyzer (pixel stats + bg + source count).
+      spectrum.py                  # SpectrumAnalyzer (wavelength/flux + peaks + SNR).
+      __init__.py                  # get_analyzer_for(product_type) dispatch.
+    analysis_types.py              # Light: is_analyzable(). No scipy import.
+    analysis_job.py                # Orchestration: fetch → analyze → persist.
     storage.py                     # Local fs / Azure Blob backends.
-    queue.py                       # Soft-import rq + best-effort enqueue.
+    queue.py                       # Soft-import rq + best-effort enqueue (preview + analysis).
   routes/                          # FastAPI routers, one per resource.
     previews.py                    # Serves local-fs PNGs at /api/previews/{path}.
+    analyses.py                    # GET /api/products/{id}/analysis.
   schemas/                         # Pydantic response models.
   cli/                             # Typer subcommands. Entry: python -m app
 
@@ -74,11 +87,14 @@ services/worker/worker/
     mast_poll.py                   # 30-min: walk instruments → ingest → deliver.
     s3_jwst_listing.py             # 6-h: anonymous list, detect unknown keys.
     preview_gen.py                 # Thin re-export of app.services.preview_job.generate_for_product.
+    analyze_product.py             # Thin re-export of app.services.analysis_job.generate_analysis_for_product.
 
 apps/web/
-  app/page.tsx, app/alerts/page.tsx  # Server components.
-  components/                        # ProductFeed, AlertFeed, HealthBadge.
-  lib/api.ts                         # Typed fetch wrappers + Result<T>.
+  app/page.tsx                     # Feed (server component).
+  app/alerts/page.tsx              # Alerts (server component).
+  app/products/[id]/page.tsx       # Phase 4 detail page (server component, parallel-fetches product + analysis).
+  components/                      # ProductFeed, AlertFeed, HealthBadge.
+  lib/api.ts                       # Typed fetch wrappers + Result<T>.
 ```
 
 **Reading order recommendation for a deep understanding:** `config.py` → `models/*` → `clients/mast.py::assemble` → `services/ingest.py` → `services/match.py` → `services/alerts.py` → `routes/*` → `worker/jobs/*`. ~25 min cold.
@@ -231,6 +247,13 @@ Schema docs that don't fit in model file docstrings.
 - `format` is `"png"` for now; the column exists so JPEG/WebP variants don't need a migration later.
 - `calibration_version` and `crds_context` on `data_products` are populated as a side effect of preview generation (extracted from the primary header) — null only if generation never ran or the header lacked the keys.
 
+### `data_product_analyses` (Phase 4)
+- One row per `(data_product_id, analyzer_name, analyzer_version)`. Unique constraint enforces it.
+- `analyzer_name` is `"image"` or `"spectrum"` (constants in the per-analyzer modules). Bumping `VERSION` in `image.py` / `spectrum.py` makes the next run create a new row alongside the old.
+- `measurements_json` is null until analysis succeeds; non-null = the row is usable. Shape varies by `analyzer_name` — image analyzers include `kind: "image"` plus pixel/background/source-count fields; spectrum analyzers include `kind: "spectrum"` plus wavelength/flux/peak/SNR fields. Always includes `meta` with `scipy_version`, `numpy_version`, `astropy_version`, `calibration_version`, `crds_context` for reproducibility diffs.
+- Failure model is identical to previews: `attempts` JSON, `last_error`, `is_permanent_failure`. Permanent: malformed FITS, missing extension, all-NaN data. Transient: S3 network errors after a successful URI parse.
+- `calibration_version` and `crds_context` on `data_products` are populated by analysis as a side effect too (same `extract_calibration_metadata` helper from `previews.py`) — first one to run wins; neither preview_gen nor analysis_job overwrites an existing value.
+
 ---
 
 ## 6. What's deferred (and why) — read before assuming something is "missing"
@@ -244,12 +267,14 @@ Through Phase 3 we explicitly do *not* do these. If you find yourself wanting on
 - **Multi-user data isolation.** No `user_id` filtering except watchlist scoping. Alerts table has no `user_id` (it inherits via `watchlist_id`).
 - **Backfill.** Re-polling MAST with a larger `limit` will pull older data, but there's no "ingest everything from program X" CLI yet. Add when needed; the existing ingest function handles arbitrary input.
 - **Auth.** No user model, no sessions, no API keys. CORS allows `localhost:3000`. The admin endpoint at `/api/admin/*` is unauthenticated — *fix before public deploy*.
-- **Previews for non-watchlist-matched products.** Phase 3 only renders for products that fire an Alert. The deterministic-first vision (plan §7) eventually wants previews for all Level 3 products; switch by removing the `if new_alerts` gate in `ingest_observations`.
-- **Periodic sweep backstop for failed previews.** Transient failures (network, BotoCoreError) get one shot from the ingest enqueue; no scheduled retry runs. Pattern is the same as `mast_poll`: a `worker/jobs/preview_sweep.py` querying `data_product_previews.storage_uri IS NULL AND is_permanent_failure=False`. Skipped because the volume is small while we're watchlist-only.
+- **Previews + analyses for non-watchlist-matched products.** Phase 3/4 only render/analyze for products that fire an Alert. The deterministic-first vision (plan §7) eventually wants both for all Level 3 products; switch by removing the `if new_alerts` gate in `ingest_observations` (single branch covers both enqueues).
+- **Periodic sweep backstop for failed previews + analyses.** Transient failures get one shot from the ingest enqueue; no scheduled retry runs. Pattern: `worker/jobs/preview_sweep.py` + `worker/jobs/analysis_sweep.py`, each querying their table for `storage_uri IS NULL` / `measurements_json IS NULL` with `is_permanent_failure=False`. Skipped because the volume is small while watchlist-only.
 - **Spectrum line annotations.** Renderer plots wavelength vs flux as-is. No Hα/[OIII]/PAH overlay markers. A static line list keyed by wavelength range is the obvious next step; redshift-aware annotation needs the observation's `z`, which isn't in our schema yet.
 - **Image stretch presets per instrument.** All imaging uses ZScale + Asinh. MIRI long-wave and NIRCam short-wave actually want different choices — when bias becomes visible, branch on `observation.instrument`.
-- **Cube collapse strategy.** `s3d` cubes are summed along the wavelength axis. Median-collapse and band-selected slices are common alternatives; revisit when an IFU product looks wrong in the UI.
+- **Cube collapse strategy.** `s3d` cubes are summed along the wavelength axis for *previews*. *Analysis* skips cubes entirely (see §7b.4). Median-collapse + band-selected slices for previews, plus a real `CubeAnalyzer`, when an IFU product needs serious treatment.
 - **next/image optimization.** Frontend uses `<img>` with eslint-disable. Switching to `next/image` requires adding the API host to `next.config.js`'s `images.domains` (which differs between dev/prod) — defer until image volumes warrant it.
+- **Photometry / calibrated SNR.** Phase 4 source count is coarse (connected components); SNR is a `|median|/MAD` proxy. photutils is the right tool for photometry — already declared as an *optional* extra in the worker pyproject. Wire it when Phase 5+ wants flux-per-source or SNR-per-resel.
+- **Analysis history endpoint.** API returns only the latest row per analyzer name. The DB keeps every version. Add `/api/products/{id}/analysis/history` when version diffing becomes a real workflow.
 
 ---
 
@@ -295,24 +320,55 @@ Through Phase 3 we explicitly do *not* do these. If you find yourself wanting on
 
 ---
 
-## 7b. Phase 4 — deterministic analysis engine (next)
+## 7b. Phase 4 — deterministic analysis engine (shipped, retained for reference)
 
-Plan reference: §11 Phase 4. Goal: produce *measured facts* (pixel stats, background, peak detection, S/N proxy) before any AI inference touches them. Persisted as a JSON payload keyed by `(data_product_id, analyzer_name, analyzer_version)` so re-runs don't shadow old measurements.
+### 7b.1 What landed
 
-Likely shape (subject to scope conversation):
+1. **Image analyzer** for `i2d`, `s2d`, `cal`: pixel statistics (min/max/mean/median/std), NaN count, sigma-clipped background (σ=3, 5 iterations), connected-components source count (`scipy.ndimage.label` on a `bg + 3σ` threshold), saturated-pixel count (≥99% of finite max).
+2. **Spectrum analyzer** for `x1d`, `c1d`: sample count, wavelength + flux range with units, `scipy.signal.find_peaks` peak + trough count (prominence ≥ 3 × MAD), robust S/N proxy from MAD.
+3. **No cube analyzer.** s3d returns None from `get_analyzer_for` and the job layer skips entirely — no failed row created. Cube measurements need their own design (per-slice stats? band-collapsed source counts? IFU spectrum extraction?) which Phase 4 doesn't scope.
+4. **Reproducibility metadata** embedded in every successful `measurements_json["meta"]`: `scipy_version`, `numpy_version`, `astropy_version`, plus `calibration_version` and `crds_context` from the FITS primary header. Lets future re-runs diff against past ones.
+5. **Product detail page** at `/products/{id}` — server component that parallel-fetches product + analysis, renders the full preview large, file metadata, and a structured measurements view grouped by section (pixel stats / background / source detection for images; wavelength / flux / features for spectra). Linked from product feed + alert cards.
 
-- New module `app/services/analysis/` with `ImageAnalyzer`, `SpectrumAnalyzer`, `CubeAnalyzer` interfaces.
-- New table `data_product_analyses(id, data_product_id, analyzer_name, version, measurements_json, generated_at)`.
-- Triggered the same way previews are: enqueue on watchlist match from `ingest_observations`. Same queue (`analyze`) or its own?
-- Output surfaced on a per-product detail page (which doesn't exist yet — Phase 4 should add it).
-- `photutils` optional dep is already declared in the worker pyproject for source detection; activate when needed.
+### 7b.2 How it's wired
 
-Open questions to resolve before coding (parallel to §7.3):
+- New ORM model `DataProductAnalysis` (one row per `(data_product_id, analyzer_name, analyzer_version)`). Migration `7ed3b023ed62`. Failure model identical to `DataProductPreview`: `attempts` JSON + `last_error` + `is_permanent_failure`.
+- `app/services/analysis/` — pure dispatch + analyzers. `base.py` has the `Analyzer` Protocol + `AnalysisResult` + `AnalysisError(is_permanent)`. Each analyzer module declares `NAME` + `VERSION` module-level constants so a bump creates a new DB row alongside the old.
+- `app/services/analysis_types.py` — lightweight `is_analyzable()` parallel to `preview_types.py`. Doesn't import scipy, so the ingest hot path stays cheap.
+- `app/services/analysis_job.py` — orchestration mirroring `preview_job.py`. Reuses `previews.fetch_fits_anonymous` + `previews.extract_calibration_metadata`. Idempotent on `(product, analyzer, version)`.
+- `app/services/queue.py::enqueue_analyze_product` — soft-import RQ, ping Redis, enqueue against the same `analyze` queue as previews. Returns False on any failure.
+- `ingest_observations` calls both `enqueue_preview_gen` and `enqueue_analyze_product` under the *same* watchlist-matched gate. `IngestResult.analyses_enqueued` count surfaces alongside `previews_enqueued`.
+- `worker/jobs/analyze_product.py` — 5-line shim so the RQ string `worker.jobs.analyze_product.generate_analysis_for_product` resolves to the API-side orchestration.
+- API: new `app/routes/analyses.py` + `app/schemas/analysis.py`. `GET /api/products/{id}/analysis` returns the latest row per analyzer.
+- API gained `scipy>=1.14` (signal.find_peaks + ndimage.label). photutils stays out — coarse source count is enough for MVP "is there structure here"; photometry is Phase 5+.
+- Frontend: `lib/api.ts` gains `getProduct(id)` + `getProductAnalyses(id)` + `DataProductRead` + `AnalysisRead` types. New page `apps/web/app/products/[id]/page.tsx`. `ProductFeed` and `AlertFeed` link the filename to the detail page.
+- Tests (35 new, 122 total): analyzer unit tests with synthetic FITS containing injected sources/peaks; analysis_job integration with mocked S3 + tmp DB; route tests covering 404 + empty + latest-per-analyzer + failure surface; ingest-enqueue tests for the analysis path.
 
-1. **Analyzer registry vs. hardcoded dispatch?** Plugin-style registry is over-engineered while N=3. Hardcode for now.
-2. **Run during preview-gen or as a separate job?** Sharing the FITS fetch is tempting (already paid the egress). But analysis is CPU-bound and previews are I/O-bound — separate jobs gives clearer scheduling. Probably: extend `preview_job._run` to optionally produce analysis output, OR a new `analysis_job.py` that takes the same approach.
-3. **Reproducibility metadata.** Store the `crds_context`, `calibration_version`, analyzer-package-version with each measurement so a re-run with a newer pipeline can be diffed.
-4. **What's the public surface?** `/api/products/{id}/analysis` returning the JSON? Or embed in the existing product detail response?
+### 7b.3 Decisions baked in (don't re-litigate)
+
+| Question | Choice | Why |
+|---|---|---|
+| Analyzer registry vs. hardcoded dispatch | Hardcoded `get_analyzer_for(product_type)` | N=2. Registry indirection adds zero value while easy to refactor later. |
+| Same job as preview_gen vs separate | Separate `analysis_job.py` | Analysis is CPU-bound, previews are I/O-bound — sharing fetch saves one S3 GET but couples scheduling/retry. Re-paying egress beats coupled failure modes. |
+| Public API shape | Dedicated `GET /api/products/{id}/analysis` | Keeps `ProductRow`/`DataProductRead` lean. List endpoint stays fast; detail page fetches both in parallel. |
+| Detail page now vs Phase 4.5 | Now | Analysis is useless without a place to see it. Same commit lets us verify end-to-end. |
+| Source detection: photutils vs scipy.ndimage | scipy.ndimage.label | photutils is the right call for photometry (Phase 5+). For "how many distinct bright regions exist", a 3σ-threshold + connected components is the simpler, lighter-dep answer. |
+| Spectrum peak detection | `scipy.signal.find_peaks` with prominence = 3 × MAD | Robust to continuum slope; no need to fit a continuum first. |
+| S/N "proxy" naming | Explicitly *proxy*, not SNR | `|median| / MAD` is a relative quality indicator. Calibrated SNR-per-resel needs FITS-header noise estimates — Phase 5+ AI consumers should know to treat this as relative. |
+| Reproducibility metadata location | Inside `measurements_json["meta"]`, not separate columns | Schema doesn't churn when we add/rename analyzer outputs. Trade-off: can't index on `crds_context` per-analysis (but the column on `data_products` *is* indexable for the cross-cutting query). |
+| Cube analysis | Skipped entirely, no failed row | A "not implemented" failed row is noise. Skipping cleanly leaves room for a real CubeAnalyzer later without migrating away from junk rows. |
+| Frontend rendering | Generic dispatch on `measurements_json["kind"]` | Image/spectrum sections hardcoded. New analyzer = new `<XMeasurements>` component, no schema work. |
+
+### 7b.4 What we intentionally do *not* do
+
+- We don't run photutils source extraction. Source count is a coarse "how many distinct bright regions" estimate, not photometry.
+- We don't compute calibrated SNR per resolution element. The `snr_proxy` is `|median| / MAD` — a relative quality number, not a science measurement.
+- We don't analyze cubes (s3d) yet. The dispatcher returns None and the job skips. No failed row created — adding cube support later is purely additive.
+- We don't surface analyzer-version history through the API. The DB keeps every (product, analyzer, version) row; the endpoint returns only the latest per analyzer name. Add `/api/products/{id}/analysis/history` when needed.
+- We don't trigger analysis for non-watchlist-matched products (same egress gate as previews). Switch by removing the `if new_alerts` branch in `ingest_observations` — same one-line change for both.
+- We don't periodically sweep failed analyses for retry. Same rationale as preview-sweep deferral: low volume while watchlist-gated. A `worker/jobs/analysis_sweep.py` is a 30-line copy of the preview-sweep pattern when needed.
+
+---
 
 ---
 

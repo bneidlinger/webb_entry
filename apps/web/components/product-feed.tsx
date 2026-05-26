@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { getProducts, type ProductRow } from "@/lib/api";
 
 function formatSize(bytes: number | null): string {
@@ -134,7 +136,14 @@ export async function ProductFeed() {
               <td className="px-4 py-2 font-mono text-xs text-webb-star/60">{p.program_id ?? "—"}</td>
               <td className="px-4 py-2 text-webb-star/60">{formatDate(p.observation_date)}</td>
               <td className="px-4 py-2 text-webb-star/60">{formatSize(p.file_size)}</td>
-              <td className="px-4 py-2 font-mono text-xs text-webb-star/40">{p.filename}</td>
+              <td className="px-4 py-2 font-mono text-xs">
+                <Link
+                  href={`/products/${p.id}`}
+                  className="text-webb-star/60 hover:text-webb-accent"
+                >
+                  {p.filename}
+                </Link>
+              </td>
             </tr>
           ))}
         </tbody>

@@ -44,7 +44,7 @@ services/api/            FastAPI + SQLAlchemy + Alembic + CLI
     services/ingest.py   MAST → DB upsert (idempotent)
   alembic/               Migrations (autogenerate enabled)
   tests/                 pytest with in-memory SQLite fixtures
-services/worker/         RQ skeleton; not yet wired into anything
+services/worker/         RQ + rq-scheduler; preview_gen + analyze_product + mast_poll + s3_listing jobs
 packages/shared/         JSON Schema + TS types for cross-language contracts
 infra/docker-compose.yml Postgres + Redis + Azurite + api + worker + web
 docs/                    azure-deployment.md, local-dev-without-docker.md
@@ -133,7 +133,19 @@ These are decisions already made; follow them unless there's a real reason to ch
 - Frontend: product feed has a Preview column; alert cards have a thumbnail. Both link to the full preview when present.
 - Tests (48 new, 87 total): renderer unit tests with synthetic HDULists; storage backend selection + traversal-safety; ingest enqueue gating; full `_run()` integration with mocked S3 + tmp filesystem.
 
-**Phases 4–8** see [plan §11](webbwatch_ai_project_plan.md).
+**Phase 4 — deterministic analysis engine** ✓ shipped
+- New ORM model `DataProductAnalysis` (one row per `(product, analyzer_name, analyzer_version)`). Migration `7ed3b023ed62`. Version bumps preserve history; same-version re-runs overwrite.
+- `app/services/analysis/` — pure analyzers. `ImageAnalyzer` (pixel stats, σ-clipped background, `scipy.ndimage.label` source count, saturated-pixel count) for `i2d`/`s2d`/`cal`. `SpectrumAnalyzer` (wavelength/flux range, `scipy.signal.find_peaks` peak count with prominence ≥ 3·MAD, robust S/N proxy) for `x1d`/`c1d`. Cube (s3d) intentionally unhandled — dispatcher returns None, job skips.
+- `app/services/analysis_types.py` — light `is_analyzable()` parallel to `preview_types.py` so the ingest hot path doesn't pay scipy import cost.
+- `app/services/analysis_job.py` — orchestration mirroring `preview_job`. Reuses `previews.fetch_fits_anonymous` + `extract_calibration_metadata`. Idempotent on `(product, analyzer, version)`. Embeds `scipy_version`/`numpy_version`/`astropy_version`/`crds_context`/`calibration_version` inside `measurements_json["meta"]` for reproducibility diffs.
+- `app/services/queue.py::enqueue_analyze_product` — soft-import RQ, same `analyze` queue as previews. `ingest_observations` enqueues analyses alongside previews under the same watchlist-matched gate. `IngestResult.analyses_enqueued` joins `previews_enqueued`.
+- `worker/jobs/analyze_product.py` — 5-line shim so the RQ string resolves.
+- API: new `GET /api/products/{id}/analysis` returning latest row per analyzer. `app/schemas/analysis.py::AnalysisRead`.
+- API deps gained `scipy>=1.14` (signal.find_peaks + ndimage.label). photutils stays optional in worker pyproject for future photometry.
+- Frontend: new `/products/[id]` server component page with structured measurements display (pixel stats / background / source detection for images; wavelength / flux / features for spectra) + reproducibility-metadata details panel. `ProductFeed` filename + alert-card filename both link to it.
+- Tests (35 new, 122 total): analyzer unit tests with synthetic FITS (injected sources/peaks); orchestration integration with mocked S3; route shape + idempotency + failure surface; ingest enqueue gate.
+
+**Phases 5–8** see [plan §11](webbwatch_ai_project_plan.md).
 
 ## Phase 2 directions — new-data detection + alerts (shipped, retained for reference)
 
