@@ -370,6 +370,89 @@ Through Phase 3 we explicitly do *not* do these. If you find yourself wanting on
 
 ---
 
+## 7c. Phase 5 directions — local AI analysis (next)
+
+Plan reference: [plan §11 Phase 5](../webbwatch_ai_project_plan.md) (scope), [plan §6](../webbwatch_ai_project_plan.md) (AI principles), [plan §7](../webbwatch_ai_project_plan.md) (report schema), [plan §8](../webbwatch_ai_project_plan.md) (`analysis_runs` table). This section is the contract between past planning (2026-05-28) and the next session that picks up Phase 5.
+
+### 7c.0 What Phase 5 is — and what it isn't
+
+**Goal.** First AI pass. A small local model running on the user's machine consumes Phase 4's deterministic measurements + product/observation metadata + plain-English context, and produces a structured "what is this and why might it be interesting" report.
+
+**Load-bearing principle (plan §6 + §13):** the model never sees raw FITS data. It narrates over already-computed facts. *Deterministic tools first, AI second.* This is the project's credibility surface — don't violate it.
+
+Cloud AI lands in Phase 6 as a second `AiProvider` implementation. The protocol designed in Phase 5 must accommodate both.
+
+### 7c.1 Decisions locked in (user conversation, 2026-05-28)
+
+| Question | Choice | Notes |
+|---|---|---|
+| Local runtime | **Ollama** | OpenAI-compatible `/v1/chat/completions` means we reuse the `openai` SDK (already a dep). Curated model registry. Native JSON-output mode. User installs Ollama themselves; worker treats it like Redis — soft-import + ping + no-op if unreachable. |
+| Modality | **Text-only first** | `llama3.1:8b-instruct-q4_K_M` or `qwen2.5:7b-instruct-q4_K_M`. Fits in 8 GB VRAM. Model sees measurements + metadata, **not** the preview PNG. Vision is Phase 5.5. |
+| Trigger | **Auto on watchlist match + explicit regenerate** | Same gate as previews + analysis. Detail page gets a "regenerate AI summary" button to re-run after a prompt-version bump. |
+| Schema | **New `ai_reports` table per plan §8** | Separate from `data_product_analyses` to preserve the facts-vs-interpretation boundary. Cloud AI joins the same table with `mode='cloud'`. |
+
+### 7c.2 Architectural calls already made (don't re-litigate)
+
+- **Ollama is the user's responsibility to install + run.** Worker pings on first use; if unreachable, the job no-ops (records `last_error="ollama_unreachable"`, leaves the row retry-eligible). Identical pattern to Discord webhook + Redis: optional external dep, graceful degradation.
+- **`LOCAL_AI_ENABLE` env flag, default off.** Same opt-in pattern as `JWST_SNS_ENABLE`. Avoids logging permanent-failure rows on every dev session where Ollama isn't installed. Flip on per environment.
+- **`AiProvider` is the shared protocol.** `LocalAiProvider` (Phase 5) and `CloudAiProvider` (Phase 6) both implement it. Phase 0 already shipped a stub `CloudAIProvider` interface — Phase 5 should **re-shape that into the shared protocol**, not maintain two parallel hierarchies.
+- **JSON-output mode is the API contract.** Prompts request structured output matching the plan §7 schema. Ollama's `format=json` + Pydantic validation on the way in.
+- **Prompt versioning via `PROMPT_VERSION` module constant.** Same pattern as analyzer `NAME`/`VERSION`. A bump creates a new row alongside the old. Idempotent on `(product_id, mode, model_name, prompt_version)`.
+- **Same `analyze` queue as previews + Phase 4 analyses.** No new queue, no new worker.
+- **HTTP only — no `ollama` Python package.** The `openai` client with `base_url=OLLAMA_BASE_URL` is sufficient and avoids a redundant SDK.
+- **One GPU model loaded at a time** (plan §6 RTX 3070 reality). Worker specifies the model name per job; Ollama handles loading. Don't build a multi-model router.
+
+### 7c.3 Likely shape — what files to expect
+
+**Backend (~12 files).** New `app/models/ai_report.py` + migration. New `app/services/ai/` package: `base.py` (Protocol + dataclasses + `AiError(is_permanent)`), `local.py` (OllamaProvider via openai SDK), `prompts/` (versioned `image_summary_v1.py` + `spectrum_summary_v1.py` exposing `PROMPT_VERSION`/`SYSTEM_PROMPT`/`build_user_prompt`), `schemas.py` (Pydantic for plan §7 shape). New `app/services/ai_job.py` orchestrator mirroring `analysis_job.py`. `queue.py::enqueue_ai_report`. `ingest.py` wires it under the watchlist gate, sequenced *after* analyze (AI consumes deterministic measurements). Worker shim `services/worker/worker/jobs/ai_report.py`. Routes `GET /api/products/{id}/ai-reports` + `POST /api/products/{id}/ai-reports/regenerate`. New schemas. Config gains `OLLAMA_BASE_URL` (default `http://localhost:11434/v1`), `LOCAL_AI_ENABLE`, `LOCAL_AI_MODEL`, `LOCAL_AI_MAX_TOKENS`, `LOCAL_AI_TEMPERATURE` (default 0.2), `LOCAL_AI_REQUEST_TIMEOUT_SECONDS` (default 120).
+
+**Frontend (~3 files).** "AI Summary" section on `apps/web/app/products/[id]/page.tsx`: renders summary, measured facts, interesting features with confidence badges, quality flags with severity, recommended next steps. Clear "AI-generated" badge + model + prompt version + timestamp. Regenerate button. `lib/api.ts` types + fetchers.
+
+**Tests (~25 new).** `tests/test_ai_prompts.py` (snapshot prompt text per version, assert measurements flow through). `tests/test_ai_local_provider.py` (mock openai client, verify request shape + response validation + error mapping). `tests/test_ai_job.py` (orchestration + idempotency + unreachable-Ollama record). `tests/test_routes_ai_reports.py` (endpoints + regenerate enqueue). Extend ingest tests for `ai_reports_enqueued` counter.
+
+**Docs.** Rewrite §7c "(next)" → "(shipped, retained for reference)" parallel to §7 and §7b. Update CLAUDE.md state line. Add `ai_reports` entry to §5 data-model reference.
+
+### 7c.4 Open questions to resolve before coding
+
+1. **RQ job dependency vs in-job enqueue.** "AI sees measurements" needs analysis to finish first. Options: (a) `analyze_job` enqueues `ai_job` as its last successful step (simple, in-job), (b) both enqueued at ingest, AI declared `depends_on=analyze_job` to RQ (visible in dashboards, depends on rq-scheduler dependency support). Pick (a) for simplicity unless you want the dashboard surface.
+2. **Regenerate: overwrite or new row?** Recommendation: **new row**. Matches plan §8's `analysis_runs` audit-trail design + the analyzer pattern. GET returns latest; garbage-collect old non-latest rows in a future sweep if volume warrants.
+3. **Output validation failure handling.** Ollama JSON mode emits "mostly JSON" — sometimes wraps in markdown fences, occasional trailing commas. Strategy: tolerant parse (strip fences, find JSON span, `json.loads`, Pydantic-validate) → on failure, record raw output in `last_error` and the schema violation, **no auto-retry**. Operator regenerates if it matters. A 7B model rarely fixes itself on retry.
+4. **Mention the preview to the model or not?** Text-only model can't see it. Recommendation: don't mention. Measurements are the source of truth; if the AI starts wanting to look at the image, that's the vision-upgrade signal.
+5. **CRDS context + calibration version in the prompt.** Phase 4 records these in `measurements_json["meta"]`. Include in the prompt so AI can mention "calibrated with pipeline X, CRDS context Y" — credibility surface. Trivial; just note in the prompt-builder.
+6. **Auto-pull missing models?** Recommendation: **no**. First job would download 5+ GB. User runs `ollama pull llama3.1:8b-instruct-q4_K_M` themselves; record "model_not_found" as permanent if it's missing.
+
+### 7c.5 Things deliberately deferred out of Phase 5
+
+- **Cloud AI** — Phase 6. The `AiProvider` protocol gets a second implementation.
+- **Reviewer mode** (cloud critiques local) — Phase 6, plan §11.
+- **Vision-capable model** — Phase 5.5. Text-only first to prove the pipeline shape. Adding vision = new provider implementation + prompt variant + base64-encoded image attachment.
+- **Settings page UI** — Phase 6. Env vars are sufficient until cloud lands and there's a real config surface.
+- **Cost tracking / usage quotas** — local is free; cloud adds this in Phase 6.
+- **Multi-product comparison** — needs related-products query, plan §5.C.
+- **Prompt A/B testing** — needs cloud-AI volume to be worth it.
+- **AI tags → feed filters** — Phase 5 stores `tags` from the report; Phase 7 surfaces them as filterable facets.
+- **Local model auto-pull** — see open question 6.
+
+### 7c.6 Pitfalls to expect (from related work, not observed in this codebase yet)
+
+- **Cold-start latency.** First request after Ollama starts can take 30+ seconds loading weights into VRAM. RQ default job timeout is 180s — bump or warm the model on worker boot.
+- **JSON mode is "mostly JSON".** Tolerant parsing required (see §7c.4-3).
+- **Temperature drift.** At T=0, the same prompt always returns the same output (good for tests). At T=0.2 (recommended default), outputs vary. **Don't snapshot-test AI output content; snapshot the prompt + validate output shape.**
+- **Ollama on Windows.** Runs as a service: `Get-Service Ollama` checks status. Base URL is `http://localhost:11434`; **the OpenAI-compatible endpoint adds `/v1`** → `http://localhost:11434/v1`.
+- **Token budgets.** Full payload (product + observation + all measurements) is ~1500 tokens; system + user prompts add ~800. 7B context windows are 8k or 32k — fine for now. Cube products + large catalogs in later phases may need input truncation.
+
+### 7c.7 Suggested commit order for the next session
+
+Don't try to land Phase 5 in one commit. Suggested split:
+
+1. **Foundation:** AiReport model + migration + AiProvider protocol + base classes + env vars + protocol-contract tests. **No actual Ollama call yet.**
+2. **Provider + prompts:** OllamaProvider + image/spectrum prompts + Pydantic schema + provider tests with mocked openai client. **No DB persistence.**
+3. **Orchestration:** ai_job + queue helper + ingest wiring + worker shim + job tests.
+4. **API + frontend:** routes + schemas + detail-page AI summary section + regenerate button.
+5. **Docs:** rewrite §7c as "shipped" parallel to §7 / §7b; update CLAUDE.md + §5 data-model.
+
+Steps 1-3 are entirely testable without Ollama installed (mocked openai client). Step 4 needs Ollama running locally to exercise end-to-end, but you can verify the frontend renders empty + error states with API stubs.
+
 ---
 
 ## 8. Verification conventions — copy-paste commands
