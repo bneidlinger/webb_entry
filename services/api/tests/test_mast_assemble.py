@@ -13,6 +13,17 @@ def test_classify_product_known_suffixes():
     assert _classify_product("") == (None, None)
 
 
+def test_classify_product_non_fits_has_no_product_type():
+    # MAST returns JPG previews and CSV/ECSV catalogs alongside the FITS science
+    # products. They share the suffix (..._i2d.jpg, ..._cat.ecsv) but Phase 3/4
+    # would choke trying to open them as FITS, so product_type must be None.
+    assert _classify_product("jw01193-c1030_t015_nircam_f444w_i2d.jpg") == (None, "jpg")
+    assert _classify_product("jw01234_001_cat.ecsv") == (None, "ecsv")
+    assert _classify_product("jw01234_001_phot.csv") == (None, "csv")
+    assert _classify_product("jw01234_001_preview.png") == (None, "png")
+    assert _classify_product("report.pdf") == (None, "pdf")
+
+
 def test_assemble_pairs_observations_with_their_products():
     obs_table = Table(
         rows=[

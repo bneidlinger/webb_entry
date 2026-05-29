@@ -21,9 +21,13 @@ from astroquery.mast import Observations
 
 # JWST per-product filename suffixes we recognize. Subset of plan §4 — extend as needed.
 # Examples: jw01234567001_02101_00001_nrca1_i2d.fits  →  product_type=i2d, ext=fits
-_PRODUCT_SUFFIX_RE = re.compile(
+#
+# FITS-only on purpose: Phase 3/4 dispatch on product_type and would try to open
+# a JPG/CSV as a FITS file. Non-FITS entries (JPG previews, PDF reports, CSV/ECSV
+# catalogs) keep file_extension but get product_type=None.
+_FITS_PRODUCT_SUFFIX_RE = re.compile(
     r"_(?P<ptype>uncal|rate|rateints|cal|calints|i2d|s2d|s3d|x1d|c1d|cat|segm|phot|preview)"
-    r"\.(?P<ext>fits|jpg|png|pdf|csv|ecsv)(?:\.gz)?$",
+    r"\.fits(?:\.gz)?$",
     re.IGNORECASE,
 )
 
@@ -97,11 +101,11 @@ def _classify_product(filename: str) -> tuple[str | None, str | None]:
     """Return (product_type, file_extension) inferred from a JWST product filename."""
     if not filename:
         return None, None
-    m = _PRODUCT_SUFFIX_RE.search(filename)
-    if not m:
-        ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else None
-        return None, ext
-    return m.group("ptype").lower(), m.group("ext").lower()
+    m = _FITS_PRODUCT_SUFFIX_RE.search(filename)
+    if m:
+        return m.group("ptype").lower(), "fits"
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else None
+    return None, ext
 
 
 # ---------------------------------------------------------------------------
