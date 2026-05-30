@@ -71,6 +71,19 @@ class Settings(BaseSettings):
     azure_openai_deployment_vision: str = Field(default="gpt-4.1-mini")
     azure_openai_use_managed_identity: bool = Field(default=False)
 
+    # ---- Phase 5: local AI (Ollama, OpenAI-compatible endpoint) ----
+    # Ollama is the user's responsibility to install + run. The worker pings it
+    # per job and no-ops if unreachable; LOCAL_AI_ENABLE gates enqueue so dev
+    # sessions without Ollama don't accumulate failure rows. The base URL ends
+    # in /v1 because that's Ollama's OpenAI-compatible path (default targets a
+    # no-Docker localhost install; the .env.example uses host.docker.internal).
+    ollama_base_url: str = Field(default="http://localhost:11434/v1")
+    local_ai_enable: bool = Field(default=False)
+    local_ai_model: str = Field(default="llama3.1:8b-instruct-q4_K_M")
+    local_ai_max_tokens: int = Field(default=1024)
+    local_ai_temperature: float = Field(default=0.2)
+    local_ai_request_timeout_seconds: int = Field(default=120)
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_allowed_origins.split(",") if o.strip()]
