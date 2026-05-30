@@ -15,23 +15,33 @@ interface RegenerateResult {
 
 function reasonMessage(reason: string | null | undefined): string {
   if (reason === "local_ai_disabled") return "Local AI is disabled (set LOCAL_AI_ENABLE).";
+  if (reason === "vision_disabled") return "Vision is disabled (set LOCAL_AI_VISION_ENABLE).";
   if (reason === "queue_unavailable") return "Worker queue unavailable (is Redis + the worker up?).";
   return "Could not queue a regeneration.";
 }
 
-export function RegenerateAiButton({ productId }: { productId: number }) {
+export function RegenerateAiButton({
+  productId,
+  vision = false,
+}: {
+  productId: number;
+  vision?: boolean;
+}) {
   const router = useRouter();
   const [state, setState] = useState<ButtonState>("idle");
   const [message, setMessage] = useState("");
+
+  const idleLabel = vision ? "Generate vision summary" : "Regenerate AI summary";
+  const busyLabel = vision ? "Generating…" : "Regenerating…";
 
   async function onClick() {
     setState("loading");
     setMessage("");
     try {
-      const res = await fetch(
-        `${API_BASE}/api/products/${productId}/ai-reports/regenerate`,
-        { method: "POST" },
-      );
+      const url = `${API_BASE}/api/products/${productId}/ai-reports/regenerate${
+        vision ? "?vision=true" : ""
+      }`;
+      const res = await fetch(url, { method: "POST" });
       const body = (await res.json()) as RegenerateResult;
       if (body.enqueued) {
         setState("done");
@@ -55,7 +65,7 @@ export function RegenerateAiButton({ productId }: { productId: number }) {
         disabled={state === "loading"}
         className="rounded border border-webb-star/20 bg-webb-deep/60 px-3 py-1.5 text-xs text-webb-star/80 hover:border-webb-accent/40 hover:text-webb-star disabled:opacity-50"
       >
-        {state === "loading" ? "Regenerating…" : "Regenerate AI summary"}
+        {state === "loading" ? busyLabel : idleLabel}
       </button>
       {message && (
         <span

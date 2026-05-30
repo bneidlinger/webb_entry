@@ -60,17 +60,22 @@ def get_product_ai_reports(
 )
 def regenerate_ai_report(
     product_id: int,
+    vision: bool = False,
     session: Session = Depends(get_session),
 ) -> RegenerateResponse:
     if session.get(DataProduct, product_id) is None:
         raise HTTPException(status_code=404, detail="product not found")
 
     # Distinguish "feature off" from "worker/Redis down" for a useful UI message.
-    if not get_settings().local_ai_enable:
+    settings = get_settings()
+    enabled = settings.local_ai_vision_enable if vision else settings.local_ai_enable
+    if not enabled:
         return RegenerateResponse(
-            status="skipped", enqueued=False, reason="local_ai_disabled"
+            status="skipped",
+            enqueued=False,
+            reason="vision_disabled" if vision else "local_ai_disabled",
         )
-    if enqueue_ai_report(product_id, force=True):
+    if enqueue_ai_report(product_id, force=True, vision=vision):
         return RegenerateResponse(status="enqueued", enqueued=True)
     return RegenerateResponse(
         status="skipped", enqueued=False, reason="queue_unavailable"

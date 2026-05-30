@@ -132,10 +132,10 @@ def test_regenerate_enqueues_when_enabled(client, product, monkeypatch):
     monkeypatch.setattr(
         ai_reports_route, "get_settings", lambda: Settings(local_ai_enable=True)
     )
-    calls: list[tuple[int, bool]] = []
+    calls: list[tuple[int, bool, bool]] = []
 
-    def _fake(product_id, *, force=False):
-        calls.append((product_id, force))
+    def _fake(product_id, *, force=False, vision=False):
+        calls.append((product_id, force, vision))
         return True
 
     monkeypatch.setattr(ai_reports_route, "enqueue_ai_report", _fake)
@@ -143,7 +143,7 @@ def test_regenerate_enqueues_when_enabled(client, product, monkeypatch):
     res = client.post(f"/api/products/{product.id}/ai-reports/regenerate")
     assert res.status_code == 202
     assert res.json() == {"status": "enqueued", "enqueued": True, "reason": None}
-    assert calls == [(product.id, True)]  # forced
+    assert calls == [(product.id, True, False)]  # forced text pass
 
 
 def test_regenerate_queue_unavailable(client, product, monkeypatch):
@@ -155,3 +155,31 @@ def test_regenerate_queue_unavailable(client, product, monkeypatch):
     res = client.post(f"/api/products/{product.id}/ai-reports/regenerate")
     assert res.status_code == 202
     assert res.json()["reason"] == "queue_unavailable"
+
+
+def test_regenerate_vision_skipped_when_vision_disabled(client, product, monkeypatch):
+    monkeypatch.setattr(
+        ai_reports_route,
+        "get_settings",
+        lambda: Settings(local_ai_enable=True, local_ai_vision_enable=False),
+    )
+    res = client.post(f"/api/products/{product.id}/ai-reports/regenerate?vision=true")
+    assert res.status_code == 202
+    assert res.json()["reason"] == "vision_disabled"
+
+
+def test_regenerate_vision_enqueues_when_enabled(client, product, monkeypatch):
+    monkeypatch.setattr(
+        ai_reports_route, "get_settings", lambda: Settings(local_ai_vision_enable=True)
+    )
+    calls: list[tuple[int, bool, bool]] = []
+
+    def _fake(product_id, *, force=False, vision=False):
+        calls.append((product_id, force, vision))
+        return True
+
+    monkeypatch.setattr(ai_reports_route, "enqueue_ai_report", _fake)
+    res = client.post(f"/api/products/{product.id}/ai-reports/regenerate?vision=true")
+    assert res.status_code == 202
+    assert res.json()["enqueued"] is True
+    assert calls == [(product.id, True, True)]  # forced + vision
