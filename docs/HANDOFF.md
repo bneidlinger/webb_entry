@@ -2,7 +2,7 @@
 
 **Audience.** A Claude (or human engineer) opening this repo cold who needs to be production-effective inside one session. This document complements — does not replace — [`CLAUDE.md`](../CLAUDE.md) (per-session orientation) and [`webbwatch_ai_project_plan.md`](../webbwatch_ai_project_plan.md) (design source of truth). Read this once at the start of any meaningful work; it codifies *why*, *what we know*, and *what we deliberately don't*. Skim in 3 min; deep-read in 10. Length is the price of not repeating mistakes.
 
-**Last updated.** End of Phase 4 (2026-05-25).
+**Last updated.** End of Phase 5 (2026-05-30).
 
 ---
 
@@ -36,6 +36,10 @@ Each of these is a deliberate, load-bearing decision. Changing one cascades. Bri
 | **Analyzer dispatch is hardcoded; no plugin registry** | N=2 (image + spectrum). A registry adds indirection for hypothetical future analyzers we don't have requirements for. Cube (s3d) returns None from the dispatcher → job-layer skip. | `services/api/app/services/analysis/__init__.py::get_analyzer_for`. |
 | **Reproducibility metadata lives inside `measurements_json`** | scipy/numpy/astropy versions + crds_context + calibration_version under `measurements_json["meta"]`. Keeps schema stable while letting future re-runs diff against past ones. | `services/api/app/services/analysis_job.py::_build_meta`. |
 | **Version bumps preserve history; same-version re-runs overwrite** | Unique constraint on `(data_product_id, analyzer_name, analyzer_version)`. Re-running v1 is a no-op; bumping the analyzer to v2 creates a new row alongside v1 for diffing. API returns only the latest per analyzer name. | `services/api/app/models/data_product_analysis.py`; `services/api/app/routes/analyses.py`. |
+| **AI is the second pass; it never touches FITS** | The local model narrates over `DataProductAnalysis.measurements_json` + metadata only (plan §6/§13 credibility surface). `analysis_job` chains `enqueue_ai_report` on success so measurements always exist first; `ai_job` *also* independently requires a successful analysis row. | `services/api/app/services/ai_job.py`; `services/api/app/services/analysis_job.py` (success path). |
+| **`AiProvider` is one sync protocol for local + cloud** | Providers run inside the sync RQ worker. Phase 0's async `clients/ai` cloud stub has no live callers; Phase 6 reshapes it onto `services/ai/base.AiProvider` rather than keeping two hierarchies. | `services/api/app/services/ai/base.py`. |
+| **`LOCAL_AI_ENABLE` gates the AI enqueue (default off)** | Same opt-in as `JWST_SNS_ENABLE`. Off → `enqueue_ai_report` no-ops, so dev sessions without Ollama never accumulate failure rows. | `services/api/app/services/queue.py::enqueue_ai_report`; `app/config.py`. |
+| **AI reports overwrite-in-place per `(product, mode, model_name, prompt_version)`** | Mirrors the analysis table. Regenerate re-runs and replaces; a `PROMPT_VERSION` bump forks a new row. API returns the latest per `(mode, model_name)`. | `services/api/app/models/ai_report.py`; `services/api/app/services/ai_job.py`. |
 
 ---
 
@@ -254,6 +258,13 @@ Schema docs that don't fit in model file docstrings.
 - Failure model is identical to previews: `attempts` JSON, `last_error`, `is_permanent_failure`. Permanent: malformed FITS, missing extension, all-NaN data. Transient: S3 network errors after a successful URI parse.
 - `calibration_version` and `crds_context` on `data_products` are populated by analysis as a side effect too (same `extract_calibration_metadata` helper from `previews.py`) — first one to run wins; neither preview_gen nor analysis_job overwrites an existing value.
 
+### `ai_reports` (Phase 5)
+- One row per `(data_product_id, mode, model_name, prompt_version)`. Unique constraint enforces it; overwrite-in-place like `data_product_analyses`.
+- `mode` is `"local"` in Phase 5 (`"cloud"`/`"hybrid"` join in Phase 6). `model_name` is the Ollama model tag; `prompt_version` is the prompt module's `PROMPT_VERSION`.
+- `report_json` is null until success; non-null = usable. It holds the validated plan-§7 report (`summary`, `measured_facts`, `interesting_features`, `quality_flags`, `recommended_next_steps`, `human_validation_required`, `tags`) **plus** a `model_notes` block (`model`, `prompt_version`, `mode`, `created_at`) stamped by the job — the model never authors `model_notes`.
+- `input_summary_json` snapshots the exact payload sent to the model (product + observation + measurements) for reproducibility/debugging — it equals what `build_user_prompt` rendered.
+- Failure model is identical to previews/analyses: `attempts` JSON, `last_error`, `is_permanent_failure`. Permanent: unparseable/invalid JSON output, missing model. Transient: Ollama unreachable. The GET endpoint returns the latest row per `(mode, model_name)`; failed rows surface so the UI can show them.
+
 ---
 
 ## 6. What's deferred (and why) — read before assuming something is "missing"
@@ -370,9 +381,28 @@ Through Phase 3 we explicitly do *not* do these. If you find yourself wanting on
 
 ---
 
-## 7c. Phase 5 directions — local AI analysis (next)
+## 7c. Phase 5 — local AI analysis (Ollama) (shipped, retained for reference)
 
-Plan reference: [plan §11 Phase 5](../webbwatch_ai_project_plan.md) (scope), [plan §6](../webbwatch_ai_project_plan.md) (AI principles), [plan §7](../webbwatch_ai_project_plan.md) (report schema), [plan §8](../webbwatch_ai_project_plan.md) (`analysis_runs` table). This section is the contract between past planning (2026-05-28) and the next session that picks up Phase 5.
+Plan reference: [plan §11 Phase 5](../webbwatch_ai_project_plan.md) (scope), [plan §6](../webbwatch_ai_project_plan.md) (AI principles), [plan §7](../webbwatch_ai_project_plan.md) (report schema), [plan §8](../webbwatch_ai_project_plan.md) (`analysis_runs` table).
+
+**Shipped 2026-05-30** (5 commits `52b5f55..` on `main`). The planning subsections below (§7c.0–7c.7) are the original design intent (2026-05-28), retained for rationale. This block records what actually landed and where the build resolved or diverged from that plan.
+
+### What landed
+
+1. **`ai_reports` table** — one row per `(data_product_id, mode, model_name, prompt_version)`; overwrite-in-place + the same failure model as `data_product_analyses`. Migration `dff64aa9d87f`. `report_json` (validated plan-§7 report + a `model_notes` block the job stamps), `input_summary_json` (the exact payload sent), `attempts`/`last_error`/`is_permanent_failure`.
+2. **`app/services/ai/`** — sync `AiProvider` Protocol + `AiError`/`AiProviderHealth`/`AiCompletion` (`base.py`); `OllamaProvider` over the openai SDK with a `client=` test seam (`local.py`); `get_ai_provider(settings)` factory (`__init__.py`); versioned prompts `prompts/{image,spectrum}_summary_v1.py` (`PROMPT_VERSION`/`SYSTEM_PROMPT`/`build_user_prompt`) + `get_prompt_for(kind)`; Pydantic report schema + tolerant `parse_ai_report` (`schemas.py`).
+3. **`app/services/ai_job.py`** — orchestrator mirroring `analysis_job`. Guards in order: disabled → not_found → no_analysis → unsupported_kind → permanent/already_generated (unless `force`). Reads the latest successful `DataProductAnalysis.measurements_json`, builds the payload, renders the kind-specific prompt, calls the provider, validates, persists.
+4. **Wiring** — `queue.enqueue_ai_report(force=)` (LOCAL_AI_ENABLE-gated, `analyze` queue, 300s timeout). `analysis_job` chains it on a successful analyze. `worker/jobs/ai_report.py` shim.
+5. **API + UI** — `GET /api/products/{id}/ai-reports` (latest per `(mode, model_name)`) + `POST .../regenerate` (force). Product detail page "AI summary" section (AI-generated badge, summary, measured facts, confidence/severity-badged features + quality flags, next steps, tags, human-validation caveat, failure/empty states) + a client regenerate button.
+6. **Config** — `OLLAMA_BASE_URL` (now ends in `/v1`), `LOCAL_AI_ENABLE` (default off), `LOCAL_AI_MODEL/MAX_TOKENS/TEMPERATURE/REQUEST_TIMEOUT_SECONDS`.
+7. **Tests** — 51 new (173 API total, all green without Ollama via a fake provider / injected openai client); frontend `typecheck` + `next build` clean.
+
+### How the plan's open questions (§7c.4) resolved
+
+- **Ordering (Q1):** option (a) — `analysis_job` chains `enqueue_ai_report` on success; `ingest.py` untouched. **Deviation from the §7c.3 file list:** there is no `ai_reports_enqueued` counter in `IngestResult`; the chain is asserted in the analysis-job tests instead.
+- **Regenerate (Q2):** **overwrite-in-place**, *not* the plan's tentative "new row" — consistent with the Phase 4 analyzer table and the `(product, mode, model_name, prompt_version)` unique key. `force=True` re-runs and replaces; a `PROMPT_VERSION` bump forks a new row.
+- **Bad JSON (Q3):** tolerant parse (fences / surrounding prose / trailing comma) → permanent `AiError`, no auto-retry. **CRDS + calibration (Q5):** carried in the payload via `measurements_json["meta"]`. **Preview to model (Q4):** no. **Auto-pull (Q6):** no → `model_not_found` is permanent.
+- **Provider placement:** new `services/ai/` per the plan, but the `AiProvider` Protocol is **sync** (it runs in the sync RQ worker). The Phase 0 `clients/ai` cloud stub (async, **zero live callers** — confirmed by grep) was left untouched; **Phase 6 reshapes it onto `services/ai/base.AiProvider`** rather than maintaining two hierarchies.
 
 ### 7c.0 What Phase 5 is — and what it isn't
 
@@ -412,7 +442,7 @@ Cloud AI lands in Phase 6 as a second `AiProvider` implementation. The protocol 
 
 **Docs.** Rewrite §7c "(next)" → "(shipped, retained for reference)" parallel to §7 and §7b. Update CLAUDE.md state line. Add `ai_reports` entry to §5 data-model reference.
 
-### 7c.4 Open questions to resolve before coding
+### 7c.4 Open questions to resolve before coding (RESOLVED — see "How the plan's open questions resolved" in the shipped block above)
 
 1. **RQ job dependency vs in-job enqueue.** "AI sees measurements" needs analysis to finish first. Options: (a) `analyze_job` enqueues `ai_job` as its last successful step (simple, in-job), (b) both enqueued at ingest, AI declared `depends_on=analyze_job` to RQ (visible in dashboards, depends on rq-scheduler dependency support). Pick (a) for simplicity unless you want the dashboard surface.
 2. **Regenerate: overwrite or new row?** Recommendation: **new row**. Matches plan §8's `analysis_runs` audit-trail design + the analyzer pattern. GET returns latest; garbage-collect old non-latest rows in a future sweep if volume warrants.
@@ -521,7 +551,13 @@ Things that already cost us debugging time. Read this before re-falling into the
 
 14. **ESLint `@next/next/no-img-element` only suppresses the immediately-following line.** A multi-line `<img ...>` JSX block won't be silenced by `// eslint-disable-next-line` placed before the variable declaration. Collapse to `const img = <img ... />;` on one line, or use `{/* eslint-disable-next-line ... */}` inside JSX.
 
-15. **The worker's `preview_gen.py` is intentionally trivial.** The orchestration lives in `app.services.preview_job` so tests in the api venv can drive `_run()` directly without standing up rq/redis. If you're adding logic to "the worker job," you're probably looking in the wrong file — edit `preview_job.py` instead.
+15. **The worker's `preview_gen.py` is intentionally trivial.** The orchestration lives in `app.services.preview_job` so tests in the api venv can drive `_run()` directly without standing up rq/redis. If you're adding logic to "the worker job," you're probably looking in the wrong file — edit `preview_job.py` instead. (Same for `analyze_product.py` → `analysis_job.py` and `ai_report.py` → `ai_job.py`.)
+
+16. **Ollama JSON mode is "mostly JSON".** `parse_ai_report` (`app/services/ai/schemas.py`) isolates the outermost `{…}`, tolerates markdown fences + a trailing comma, then Pydantic-validates. A failure is **permanent** (no auto-retry — a 7B model rarely self-corrects); the operator regenerates. Don't add retry-on-parse-failure.
+
+17. **Don't snapshot AI output in tests.** At `LOCAL_AI_TEMPERATURE > 0` the same prompt varies run-to-run. Tests snapshot the *prompt* (dispatch, version, guardrails, measurements flow-through) and validate the output *shape*, never its content — see `test_ai_prompts.py` and `test_ai_job.py` (which drives a fake provider, never a live model).
+
+18. **Ollama cold-start can exceed RQ's default timeout.** The first request after the server starts loads weights into VRAM (30s+). The AI job runs with a 300s `job_timeout` (`queue.AI_JOB_TIMEOUT`); the provider request timeout is `LOCAL_AI_REQUEST_TIMEOUT_SECONDS` (default 120). On Windows, Ollama's base URL is `http://localhost:11434` but the OpenAI-compatible path **adds `/v1`** → `http://localhost:11434/v1`.
 
 ---
 

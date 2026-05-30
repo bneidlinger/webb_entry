@@ -100,7 +100,7 @@ These are decisions already made; follow them unless there's a real reason to ch
 - **Commits**: one commit per phase or per cohesive change. Conventional-ish ("Phase N: ..." or "<area>: ..."). Co-author trailer for AI assistance. No `--no-verify`, no `--amend` on pushed commits.
 - **Secrets**: never put real secrets in `.env.example`. GitHub push protection is on; even false-positive matches (like the Azurite well-known dev key) get blocked. Use `UseDevelopmentStorage=true` for Azurite.
 
-## State (2026-05-25)
+## State (2026-05-30)
 
 **Phase 0 — scaffold** ✓ shipped (`commit 22223f3`)
 - Monorepo, Next.js 15 + Tailwind, FastAPI with `/health`, RQ worker skeleton, Azurite/Postgres/Redis in compose, GitHub Actions CI, `CloudAIProvider` interface with OpenAI + Azure OpenAI adapters.
@@ -145,7 +145,15 @@ These are decisions already made; follow them unless there's a real reason to ch
 - Frontend: new `/products/[id]` server component page with structured measurements display (pixel stats / background / source detection for images; wavelength / flux / features for spectra) + reproducibility-metadata details panel. `ProductFeed` filename + alert-card filename both link to it.
 - Tests (35 new, 122 total): analyzer unit tests with synthetic FITS (injected sources/peaks); orchestration integration with mocked S3; route shape + idempotency + failure surface; ingest enqueue gate.
 
-**Phases 5–8** see [plan §11](webbwatch_ai_project_plan.md).
+**Phase 5 — local AI analysis (Ollama)** ✓ shipped
+- New ORM model `AiReport` (one row per `(product, mode, model_name, prompt_version)`), overwrite-in-place + failure model mirroring `DataProductAnalysis`. Migration `dff64aa9d87f`. `report_json` (validated plan-§7 report + stamped `model_notes`) + `input_summary_json` (exact payload sent).
+- `app/services/ai/` — sync `AiProvider` protocol (`base.py`) + `OllamaProvider` over the openai SDK against Ollama's `/v1` endpoint (`local.py`) + `get_ai_provider` factory. Versioned prompts (`prompts/image_summary_v1.py`, `spectrum_summary_v1.py`) + tolerant `parse_ai_report` JSON validation (`schemas.py`). The unused Phase 0 `clients/ai` cloud stub stays put; Phase 6 reshapes it onto this protocol.
+- `app/services/ai_job.py` — orchestration mirroring `analysis_job`; the model narrates over the latest `DataProductAnalysis.measurements_json` (never FITS). `analysis_job` chains `enqueue_ai_report` on success (AI runs second); `ingest` is unchanged. Worker shim `worker/jobs/ai_report.py`.
+- `LOCAL_AI_ENABLE` env gate (default off) + `OLLAMA_BASE_URL` (`/v1`) + `LOCAL_AI_MODEL/MAX_TOKENS/TEMPERATURE/REQUEST_TIMEOUT_SECONDS`. Ollama is the user's responsibility to install + run; the worker no-ops if it's unreachable.
+- API: `GET /api/products/{id}/ai-reports` (latest per mode+model), `POST /api/products/{id}/ai-reports/regenerate` (force). Frontend: product detail page "AI summary" section (AI-generated badge, summary, measured facts, confidence/severity-badged features + quality flags, next steps, tags, human-validation caveat) + regenerate button.
+- Tests (51 new, 173 total, all pass without Ollama via a fake provider / injected openai client). Cloud AI is Phase 6.
+
+**Phases 6–8** see [plan §11](webbwatch_ai_project_plan.md).
 
 ## Phase 2 directions — new-data detection + alerts (shipped, retained for reference)
 
