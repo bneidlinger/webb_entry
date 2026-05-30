@@ -2,7 +2,7 @@
 
 **Audience.** A Claude (or human engineer) opening this repo cold who needs to be production-effective inside one session. This document complements — does not replace — [`CLAUDE.md`](../CLAUDE.md) (per-session orientation) and [`webbwatch_ai_project_plan.md`](../webbwatch_ai_project_plan.md) (design source of truth). Read this once at the start of any meaningful work; it codifies *why*, *what we know*, and *what we deliberately don't*. Skim in 3 min; deep-read in 10. Length is the price of not repeating mistakes.
 
-**Last updated.** End of Phase 5 (2026-05-30).
+**Last updated.** End of Phase 5.5 (2026-05-30).
 
 ---
 
@@ -40,6 +40,7 @@ Each of these is a deliberate, load-bearing decision. Changing one cascades. Bri
 | **`AiProvider` is one sync protocol for local + cloud** | Providers run inside the sync RQ worker. Phase 0's async `clients/ai` cloud stub has no live callers; Phase 6 reshapes it onto `services/ai/base.AiProvider` rather than keeping two hierarchies. | `services/api/app/services/ai/base.py`. |
 | **`LOCAL_AI_ENABLE` gates the AI enqueue (default off)** | Same opt-in as `JWST_SNS_ENABLE`. Off → `enqueue_ai_report` no-ops, so dev sessions without Ollama never accumulate failure rows. | `services/api/app/services/queue.py::enqueue_ai_report`; `app/config.py`. |
 | **AI reports overwrite-in-place per `(product, mode, model_name, prompt_version)`** | Mirrors the analysis table. Regenerate re-runs and replaces; a `PROMPT_VERSION` bump forks a new row. API returns the latest per `(mode, model_name)`. | `services/api/app/models/ai_report.py`; `services/api/app/services/ai_job.py`. |
+| **Vision is on-demand and a separate report (`mode="local_vision"`)** | The vision model loads only on an explicit regenerate (plan §6 one-model-at-a-time), so no preview/analysis job coupling. It reuses the `ai_reports` table + `mode` column (no migration), so the text + vision reports coexist. `PreviewStorage.read` feeds the preview PNG to the provider. | `services/api/app/services/ai_job.py` (`vision=`); `app/routes/ai_reports.py` (`?vision`); `app/services/storage.py`. |
 
 ---
 
@@ -263,7 +264,8 @@ Schema docs that don't fit in model file docstrings.
 - `mode` is `"local"` in Phase 5 (`"cloud"`/`"hybrid"` join in Phase 6). `model_name` is the Ollama model tag; `prompt_version` is the prompt module's `PROMPT_VERSION`.
 - `report_json` is null until success; non-null = usable. It holds the validated plan-§7 report (`summary`, `measured_facts`, `interesting_features`, `quality_flags`, `recommended_next_steps`, `human_validation_required`, `tags`) **plus** a `model_notes` block (`model`, `prompt_version`, `mode`, `created_at`) stamped by the job — the model never authors `model_notes`.
 - `input_summary_json` snapshots the exact payload sent to the model (product + observation + measurements) for reproducibility/debugging — it equals what `build_user_prompt` rendered.
-- Failure model is identical to previews/analyses: `attempts` JSON, `last_error`, `is_permanent_failure`. Permanent: unparseable/invalid JSON output, missing model. Transient: Ollama unreachable. The GET endpoint returns the latest row per `(mode, model_name)`; failed rows surface so the UI can show them.
+- Failure model is identical to previews/analyses: `attempts` JSON, `last_error`, `is_permanent_failure`. Permanent: unparseable/invalid JSON output, missing model. Transient: Ollama unreachable, unreadable preview. The GET endpoint returns the latest row per `(mode, model_name)`; failed rows surface so the UI can show them.
+- `mode` is `"local"` (Phase 5 text) or `"local_vision"` (Phase 5.5 vision — see §7c.8); both can coexist for one product, and `report_json["model_notes"]["mode"]` records which produced a given report. Vision rows carry the vision model tag in `model_name`.
 
 ---
 
@@ -455,7 +457,7 @@ Cloud AI lands in Phase 6 as a second `AiProvider` implementation. The protocol 
 
 - **Cloud AI** — Phase 6. The `AiProvider` protocol gets a second implementation.
 - **Reviewer mode** (cloud critiques local) — Phase 6, plan §11.
-- **Vision-capable model** — Phase 5.5. Text-only first to prove the pipeline shape. Adding vision = new provider implementation + prompt variant + base64-encoded image attachment.
+- **Vision-capable model** — ✓ shipped in Phase 5.5 (§7c.8): an on-demand multimodal pass over the preview PNG, `mode="local_vision"`. (Phase 5 was text-only first to prove the pipeline shape.)
 - **Settings page UI** — Phase 6. Env vars are sufficient until cloud lands and there's a real config surface.
 - **Cost tracking / usage quotas** — local is free; cloud adds this in Phase 6.
 - **Multi-product comparison** — needs related-products query, plan §5.C.
@@ -482,6 +484,17 @@ Don't try to land Phase 5 in one commit. Suggested split:
 5. **Docs:** rewrite §7c as "shipped" parallel to §7 / §7b; update CLAUDE.md + §5 data-model.
 
 Steps 1-3 are entirely testable without Ollama installed (mocked openai client). Step 4 needs Ollama running locally to exercise end-to-end, but you can verify the frontend renders empty + error states with API stubs.
+
+### 7c.8 Phase 5.5 — vision over the preview (shipped 2026-05-30)
+
+On-demand local vision (4 commits `360a73b..` on `main`). A multimodal model also looks at the product's full preview PNG and writes a **second** report, `mode="local_vision"`, alongside the text `mode="local"` one.
+
+- **On-demand, not auto** (user decision + plan §6 "one model at a time"): triggered only by `POST .../ai-reports/regenerate?vision=true` (the "Generate vision summary" button). Text still auto-runs. So there's **no preview/analysis job coupling**, the heavy vision model loads only when invoked, and the preview is guaranteed present by click-time.
+- **No DB migration** — `mode` reuses the existing `String(16)` column. The GET (latest per `(mode, model_name)`) + the frontend (maps all reports) surface both, with a "vision" chip on the vision card.
+- **Image source:** the full preview PNG, read back via the new `PreviewStorage.read(key)` (both backends) using `storage.preview_storage_key` (single-sourced with `preview_job`), base64'd into a multimodal chat message by `OllamaProvider.complete(image=)`.
+- **Vision prompts:** `VISION_SYSTEM_PROMPT` + `VISION_PROMPT_VERSION` per prompt module — base guardrails plus "corroborate visually, the measurements stay authoritative, never read numbers off the image".
+- **Config:** `LOCAL_AI_VISION_ENABLE` (default off), `LOCAL_AI_VISION_MODEL` (`llava:7b`; `llama3.2-vision:11b` for ≥12 GB). `get_ai_provider(vision=)` picks the model. The vision job adds `vision_disabled` + `no_preview` skips to the Phase 5 guard set; an unreadable preview is transient.
+- **What we don't do:** auto-run vision per match (model-swap thrash); a spectrum is eligible too (its chart is the image). Cloud vision is Phase 6.
 
 ---
 
@@ -558,6 +571,8 @@ Things that already cost us debugging time. Read this before re-falling into the
 17. **Don't snapshot AI output in tests.** At `LOCAL_AI_TEMPERATURE > 0` the same prompt varies run-to-run. Tests snapshot the *prompt* (dispatch, version, guardrails, measurements flow-through) and validate the output *shape*, never its content — see `test_ai_prompts.py` and `test_ai_job.py` (which drives a fake provider, never a live model).
 
 18. **Ollama cold-start can exceed RQ's default timeout.** The first request after the server starts loads weights into VRAM (30s+). The AI job runs with a 300s `job_timeout` (`queue.AI_JOB_TIMEOUT`); the provider request timeout is `LOCAL_AI_REQUEST_TIMEOUT_SECONDS` (default 120). On Windows, Ollama's base URL is `http://localhost:11434` but the OpenAI-compatible path **adds `/v1`** → `http://localhost:11434/v1`.
+
+19. **Vision (Phase 5.5) uses a second, heavier model — keep it on-demand.** `mode="local_vision"` loads `LOCAL_AI_VISION_MODEL`, which on 8 GB VRAM swaps with the text model. It runs only on an explicit regenerate (`?vision=true`) and needs a full preview to exist first (`no_preview` skip otherwise). Adding vision needed **no migration** — `mode` is just a new value in the existing column, and the text + vision reports coexist (GET returns latest per `(mode, model_name)`).
 
 ---
 

@@ -153,6 +153,13 @@ These are decisions already made; follow them unless there's a real reason to ch
 - API: `GET /api/products/{id}/ai-reports` (latest per mode+model), `POST /api/products/{id}/ai-reports/regenerate` (force). Frontend: product detail page "AI summary" section (AI-generated badge, summary, measured facts, confidence/severity-badged features + quality flags, next steps, tags, human-validation caveat) + regenerate button.
 - Tests (51 new, 173 total, all pass without Ollama via a fake provider / injected openai client). Cloud AI is Phase 6.
 
+**Phase 5.5 — local AI vision (Ollama, on-demand)** ✓ shipped
+- Opt-in multimodal pass: a vision model also looks at the full preview PNG and writes a second report with `mode="local_vision"` alongside the text `mode="local"` one. **No migration** — `mode` reuses the existing `ai_reports` column.
+- On-demand only (plan §6 one-model-at-a-time): the "Generate vision summary" button → `POST /api/products/{id}/ai-reports/regenerate?vision=true`. Text still auto-runs; no preview/analysis job coupling.
+- `PreviewStorage.read(key)` (both backends) + `preview_storage_key` feed the preview to `OllamaProvider.complete(image=)` as a base64 data URI. Vision prompts (`VISION_SYSTEM_PROMPT`/`VISION_PROMPT_VERSION`) keep measurements authoritative. Config: `LOCAL_AI_VISION_ENABLE` (default off) + `LOCAL_AI_VISION_MODEL` (`llava:7b`).
+- `ai_job._run(vision=)` adds `vision_disabled` + `no_preview` skips; helpers gained a `mode` param so text + vision rows are keyed independently. Frontend: a second regenerate button + a "vision" chip on `local_vision` cards.
+- Tests (18 new, 191 total, all pass without Ollama via a fake provider + injected storage). Web typecheck + build clean. Cloud AI (incl. cloud vision) is Phase 6.
+
 **Phases 6–8** see [plan §11](webbwatch_ai_project_plan.md).
 
 ## Phase 2 directions — new-data detection + alerts (shipped, retained for reference)
