@@ -46,6 +46,7 @@ from app.services.previews import (
     extract_calibration_metadata,
     fetch_fits_anonymous,
 )
+from app.services.queue import enqueue_ai_report
 
 log = logging.getLogger(__name__)
 
@@ -141,11 +142,18 @@ def _run(session: Session, product_id: int) -> dict:
     payload["meta"] = _build_meta(product, fits_meta)
     _upsert_success(session, product, analyzer, payload)
 
+    # Phase 5: chain the local-AI pass now that deterministic measurements exist
+    # (AI narrates over them — it must run second). Best-effort and gated by
+    # LOCAL_AI_ENABLE inside enqueue_ai_report; it never raises, so a failed
+    # enqueue can't break analysis.
+    ai_enqueued = enqueue_ai_report(product.id)
+
     return {
         "product_id": product_id,
         "status": "ok",
         "analyzer": analyzer.name,
         "analyzer_version": analyzer.version,
+        "ai_enqueued": ai_enqueued,
     }
 
 

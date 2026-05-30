@@ -262,3 +262,34 @@ def test_version_bump_creates_new_row_alongside_old(session, monkeypatch):
 
     versions = sorted(a.analyzer_version for a in prod.analyses)
     assert versions == ["1", "2"]
+
+
+# ---------------------------------------------------------------------------
+# Phase 5: a successful analysis chains the local-AI pass (AI runs second).
+
+
+def test_success_chains_ai_report_enqueue(session, monkeypatch):
+    monkeypatch.setattr(analysis_job, "fetch_fits_anonymous", lambda _: _image_fits_bytes())
+    calls: list[int] = []
+    monkeypatch.setattr(analysis_job, "enqueue_ai_report", lambda pid: calls.append(pid) or True)
+    prod = _create_product(session, product_type="i2d")
+
+    result = analysis_job._run(session, prod.id)
+    session.commit()
+
+    assert result["status"] == "ok"
+    assert result["ai_enqueued"] is True
+    assert calls == [prod.id]
+
+
+def test_failed_analysis_does_not_chain_ai(session, monkeypatch):
+    monkeypatch.setattr(analysis_job, "fetch_fits_anonymous", lambda _: b"not a fits file")
+    calls: list[int] = []
+    monkeypatch.setattr(analysis_job, "enqueue_ai_report", lambda pid: calls.append(pid) or True)
+    prod = _create_product(session, product_type="i2d")
+
+    result = analysis_job._run(session, prod.id)
+    session.commit()
+
+    assert result["status"] == "error"
+    assert calls == []  # AI not chained when analysis fails

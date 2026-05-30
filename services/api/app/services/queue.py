@@ -24,9 +24,11 @@ log = logging.getLogger(__name__)
 
 PREVIEW_GEN_JOB = "worker.jobs.preview_gen.generate_for_product"
 ANALYSIS_JOB = "worker.jobs.analyze_product.generate_analysis_for_product"
+AI_REPORT_JOB = "worker.jobs.ai_report.generate_ai_report_for_product"
 PREVIEW_QUEUE_NAME = "analyze"
 PREVIEW_JOB_TIMEOUT = 600  # seconds — FITS fetch + render budget
 ANALYSIS_JOB_TIMEOUT = 600  # FITS fetch + analyzer budget (CPU-bound, fast)
+AI_JOB_TIMEOUT = 300  # cold-start weight load (30s+) + generation budget
 PREVIEW_RESULT_TTL = 3600
 
 
@@ -110,4 +112,39 @@ def enqueue_analyze_product(product_id: int, product_type: str | None = None) ->
         return False
 
     log.info("Enqueued analysis for product_id=%d", product_id)
+    return True
+
+
+def enqueue_ai_report(product_id: int, *, force: bool = False) -> bool:
+    """Enqueue a local-AI-report job for `product_id`. Returns True on success.
+
+    Gated by LOCAL_AI_ENABLE (returns False when off, like the SNS endpoint) so
+    dev sessions without Ollama don't queue jobs that would only record
+    failures. Also returns False when rq/redis isn't importable or Redis is
+    unreachable. `force` re-runs even if a report already exists (the regenerate
+    path); the job layer enforces the rest of the idempotency rules.
+    """
+    if not get_settings().local_ai_enable:
+        return False
+
+    conn = _try_connect()
+    if conn is None:
+        return False
+
+    try:
+        from rq import Queue
+
+        q = Queue(PREVIEW_QUEUE_NAME, connection=conn)
+        q.enqueue(
+            AI_REPORT_JOB,
+            product_id,
+            force,
+            job_timeout=AI_JOB_TIMEOUT,
+            result_ttl=PREVIEW_RESULT_TTL,
+        )
+    except Exception as e:  # noqa: BLE001
+        log.warning("Failed to enqueue AI report for product_id=%d: %s", product_id, e)
+        return False
+
+    log.info("Enqueued AI report for product_id=%d (force=%s)", product_id, force)
     return True
