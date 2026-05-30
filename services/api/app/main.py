@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.routes import (
     admin,
+    ai_reports,
     alerts,
     analyses,
     health,
@@ -41,6 +42,7 @@ def create_app() -> FastAPI:
     app.include_router(observations.router)
     app.include_router(products.router)
     app.include_router(analyses.router)
+    app.include_router(ai_reports.router)
     app.include_router(previews.router)
     app.include_router(watchlists.router)
     app.include_router(alerts.router)
