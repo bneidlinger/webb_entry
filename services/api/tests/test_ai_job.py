@@ -10,7 +10,7 @@ import json
 from datetime import UTC, datetime
 
 from app.config import Settings
-from app.models import DataProduct, DataProductAnalysis, Observation
+from app.models import DataProduct, DataProductAnalysis, DataProductPreview, Observation
 from app.services import ai_job
 from app.services.ai.base import AiCompletion, AiError, AiProviderHealth
 
@@ -34,29 +34,62 @@ class _FakeProvider:
     def health(self) -> AiProviderHealth:
         return AiProviderHealth(provider="fake", ok=True, model="test-model")
 
-    def complete(self, *, system, user, max_tokens, temperature) -> AiCompletion:
+    def complete(
+        self, *, system, user, max_tokens, temperature, image=None, image_media_type="image/png"
+    ) -> AiCompletion:
         self.calls.append(
-            {"system": system, "user": user, "max_tokens": max_tokens, "temperature": temperature}
+            {
+                "system": system,
+                "user": user,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "image": image,
+            }
         )
         if self._error is not None:
             raise self._error
         return AiCompletion(text=self._text or "", model="test-model")
 
 
-def _enable(monkeypatch, *, enable: bool = True) -> Settings:
-    s = Settings(
+def _settings(*, enable: bool = True, vision_enable: bool = False) -> Settings:
+    return Settings(
         local_ai_enable=enable,
+        local_ai_vision_enable=vision_enable,
         local_ai_model="test-model",
+        local_ai_vision_model="test-vision-model",
         local_ai_max_tokens=512,
         local_ai_temperature=0.0,
     )
+
+
+def _enable(monkeypatch, **kw) -> Settings:
+    s = _settings(**kw)
     monkeypatch.setattr(ai_job, "get_settings", lambda: s)
     return s
 
 
 def _install(monkeypatch, provider: _FakeProvider) -> _FakeProvider:
-    monkeypatch.setattr(ai_job, "get_ai_provider", lambda settings: provider)
+    monkeypatch.setattr(ai_job, "get_ai_provider", lambda settings, vision=False: provider)
     return provider
+
+
+class _FakeStorage:
+    def __init__(self, *, data: bytes = b"PNGBYTES", error: Exception | None = None) -> None:
+        self._data = data
+        self._error = error
+
+    def upload(self, **_kw) -> str:
+        return "http://x"
+
+    def read(self, key: str) -> bytes:
+        if self._error is not None:
+            raise self._error
+        return self._data
+
+
+def _install_storage(monkeypatch, storage: _FakeStorage) -> _FakeStorage:
+    monkeypatch.setattr(ai_job, "get_preview_storage", lambda settings: storage)
+    return storage
 
 
 def _seed_product(session, *, product_type="i2d") -> DataProduct:
@@ -99,6 +132,19 @@ def _add_analysis(session, prod, *, kind="image", measurements=None) -> DataProd
     session.add(row)
     session.flush()
     return row
+
+
+def _add_full_preview(session, prod) -> DataProductPreview:
+    p = DataProductPreview(
+        data_product_id=prod.id,
+        variant="full",
+        format="png",
+        storage_uri=f"http://x/api/previews/{prod.id}/full.png",
+        attempts=[],
+    )
+    session.add(p)
+    session.flush()
+    return p
 
 
 # ---- gating + sequencing --------------------------------------------------
@@ -282,3 +328,93 @@ def test_force_overrides_permanent_failure(session, monkeypatch):
     row = prod.ai_reports[0]
     assert row.is_permanent_failure is False
     assert row.report_json["summary"].startswith("A NIRCam")
+
+
+# ---- vision (Phase 5.5) ---------------------------------------------------
+
+
+def test_vision_disabled_skips(session, monkeypatch):
+    _enable(monkeypatch, enable=True, vision_enable=False)
+    prod = _seed_product(session)
+    _add_analysis(session, prod)
+    assert ai_job._run(session, prod.id, vision=True)["reason"] == "vision_disabled"
+
+
+def test_vision_skips_when_no_preview(session, monkeypatch):
+    _enable(monkeypatch, vision_enable=True)
+    _install(monkeypatch, _FakeProvider(text=_VALID_JSON))
+    prod = _seed_product(session)
+    _add_analysis(session, prod)  # analysis present, but no preview rendered yet
+    assert ai_job._run(session, prod.id, vision=True)["reason"] == "no_preview"
+
+
+def test_vision_success_attaches_image_and_writes_vision_row(session, monkeypatch):
+    _enable(monkeypatch, vision_enable=True)
+    provider = _install(monkeypatch, _FakeProvider(text=_VALID_JSON))
+    _install_storage(monkeypatch, _FakeStorage(data=b"PNGBYTES"))
+    prod = _seed_product(session)
+    _add_analysis(session, prod)
+    _add_full_preview(session, prod)
+
+    result = ai_job._run(session, prod.id, vision=True)
+    session.commit()
+
+    assert result["status"] == "ok"
+    assert result["mode"] == "local_vision"
+    assert result["model_name"] == "test-vision-model"
+    assert provider.calls[0]["image"] == b"PNGBYTES"  # preview reached the model
+
+    session.refresh(prod)
+    rows = [r for r in prod.ai_reports if r.mode == "local_vision"]
+    assert len(rows) == 1
+    assert rows[0].report_json["model_notes"]["mode"] == "local_vision"
+
+
+def test_vision_and_text_reports_coexist(session, monkeypatch):
+    _enable(monkeypatch, enable=True, vision_enable=True)
+    _install(monkeypatch, _FakeProvider(text=_VALID_JSON))
+    _install_storage(monkeypatch, _FakeStorage())
+    prod = _seed_product(session)
+    _add_analysis(session, prod)
+    _add_full_preview(session, prod)
+
+    ai_job._run(session, prod.id, vision=False)  # text
+    ai_job._run(session, prod.id, vision=True)  # vision
+    session.commit()
+    session.refresh(prod)
+
+    assert {r.mode for r in prod.ai_reports} == {"local", "local_vision"}
+    assert len(prod.ai_reports) == 2
+
+
+def test_vision_idempotent(session, monkeypatch):
+    _enable(monkeypatch, vision_enable=True)
+    _install(monkeypatch, _FakeProvider(text=_VALID_JSON))
+    _install_storage(monkeypatch, _FakeStorage())
+    prod = _seed_product(session)
+    _add_analysis(session, prod)
+    _add_full_preview(session, prod)
+    ai_job._run(session, prod.id, vision=True)
+    session.commit()
+
+    _install(monkeypatch, _FakeProvider(error=AssertionError("should not regenerate")))
+    assert ai_job._run(session, prod.id, vision=True)["reason"] == "already_generated"
+
+
+def test_vision_unreadable_preview_is_transient(session, monkeypatch):
+    _enable(monkeypatch, vision_enable=True)
+    _install(monkeypatch, _FakeProvider(text=_VALID_JSON))
+    _install_storage(monkeypatch, _FakeStorage(error=FileNotFoundError("gone")))
+    prod = _seed_product(session)
+    _add_analysis(session, prod)
+    _add_full_preview(session, prod)
+
+    result = ai_job._run(session, prod.id, vision=True)
+    session.commit()
+    session.refresh(prod)
+
+    assert result["status"] == "error"
+    assert result["is_permanent"] is False
+    row = next(r for r in prod.ai_reports if r.mode == "local_vision")
+    assert row.is_permanent_failure is False
+    assert "preview_unreadable" in row.last_error

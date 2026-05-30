@@ -115,16 +115,22 @@ def enqueue_analyze_product(product_id: int, product_type: str | None = None) ->
     return True
 
 
-def enqueue_ai_report(product_id: int, *, force: bool = False) -> bool:
+def enqueue_ai_report(
+    product_id: int, *, force: bool = False, vision: bool = False
+) -> bool:
     """Enqueue a local-AI-report job for `product_id`. Returns True on success.
 
-    Gated by LOCAL_AI_ENABLE (returns False when off, like the SNS endpoint) so
-    dev sessions without Ollama don't queue jobs that would only record
-    failures. Also returns False when rq/redis isn't importable or Redis is
-    unreachable. `force` re-runs even if a report already exists (the regenerate
-    path); the job layer enforces the rest of the idempotency rules.
+    Gated by LOCAL_AI_ENABLE (text) or LOCAL_AI_VISION_ENABLE (`vision=True`) —
+    returns False when the relevant mode is off, like the SNS endpoint, so dev
+    sessions without Ollama don't queue jobs that would only record failures.
+    Also returns False when rq/redis isn't importable or Redis is unreachable.
+    `force` re-runs even if a report already exists (the regenerate path);
+    `vision` runs the multimodal pass over the preview. The job layer enforces
+    the rest of the idempotency + sequencing rules.
     """
-    if not get_settings().local_ai_enable:
+    settings = get_settings()
+    enabled = settings.local_ai_vision_enable if vision else settings.local_ai_enable
+    if not enabled:
         return False
 
     conn = _try_connect()
@@ -139,6 +145,7 @@ def enqueue_ai_report(product_id: int, *, force: bool = False) -> bool:
             AI_REPORT_JOB,
             product_id,
             force,
+            vision,
             job_timeout=AI_JOB_TIMEOUT,
             result_ttl=PREVIEW_RESULT_TTL,
         )
@@ -146,5 +153,10 @@ def enqueue_ai_report(product_id: int, *, force: bool = False) -> bool:
         log.warning("Failed to enqueue AI report for product_id=%d: %s", product_id, e)
         return False
 
-    log.info("Enqueued AI report for product_id=%d (force=%s)", product_id, force)
+    log.info(
+        "Enqueued AI report for product_id=%d (force=%s vision=%s)",
+        product_id,
+        force,
+        vision,
+    )
     return True
