@@ -48,6 +48,20 @@ around it), matching exactly this shape:
 }"""
 
 
+VISION_PROMPT_VERSION = "v1"
+
+VISION_SYSTEM_PROMPT = SYSTEM_PROMPT + (
+    "\n\nYou are ALSO shown the rendered preview image for this product (the "
+    "greyscale ZScale+Asinh PNG). Use it only for qualitative visual "
+    "corroboration: overall morphology, whether the field looks empty or "
+    "crowded, obvious artifacts, gradients, or diffraction spikes. The "
+    "deterministic measurements above remain authoritative — never read or infer "
+    "numeric values from the image, and never contradict the measurements. If the "
+    "image and the numbers disagree, defer to the numbers and add a quality_flag "
+    "noting the mismatch."
+)
+
+
 def build_user_prompt(payload: dict) -> str:
     """Render the product/observation/measurements payload into the user turn.
 

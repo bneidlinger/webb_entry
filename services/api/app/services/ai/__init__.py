@@ -18,15 +18,16 @@ from app.services.ai.local import OllamaProvider
 from app.services.ai.schemas import AiReportPayload, parse_ai_report
 
 
-def get_ai_provider(settings: Settings) -> AiProvider:
+def get_ai_provider(settings: Settings, *, vision: bool = False) -> AiProvider:
     """Construct the configured local AI provider.
 
-    Phase 5 has exactly one (Ollama); Phase 6 adds cloud providers selected by an
-    env flag. Kept as a factory so the job layer never imports a concrete provider.
+    `vision=True` selects the multimodal model (`local_ai_vision_model`). Phase 5
+    has one provider (Ollama); Phase 6 adds cloud providers selected by an env
+    flag. Kept as a factory so the job layer never imports a concrete provider.
     """
     return OllamaProvider(
         base_url=settings.ollama_base_url,
-        model=settings.local_ai_model,
+        model=settings.local_ai_vision_model if vision else settings.local_ai_model,
         timeout=float(settings.local_ai_request_timeout_seconds),
     )
 

@@ -16,6 +16,8 @@ and error mapping without a live server.
 """
 from __future__ import annotations
 
+import base64
+
 from openai import (
     APIConnectionError,
     APIError,
@@ -62,13 +64,26 @@ class OllamaProvider(AiProvider):
         user: str,
         max_tokens: int,
         temperature: float,
+        image: bytes | None = None,
+        image_media_type: str = "image/png",
     ) -> AiCompletion:
+        if image is None:
+            user_content: object = user
+        else:
+            b64 = base64.b64encode(image).decode("ascii")
+            user_content = [
+                {"type": "text", "text": user},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{image_media_type};base64,{b64}"},
+                },
+            ]
         try:
             resp = self._client.chat.completions.create(
                 model=self._model,
                 messages=[
                     {"role": "system", "content": system},
-                    {"role": "user", "content": user},
+                    {"role": "user", "content": user_content},
                 ],
                 response_format={"type": "json_object"},
                 max_tokens=max_tokens,

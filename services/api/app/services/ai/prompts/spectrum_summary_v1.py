@@ -52,6 +52,20 @@ around it), matching exactly this shape:
 }"""
 
 
+VISION_PROMPT_VERSION = "v1"
+
+VISION_SYSTEM_PROMPT = SYSTEM_PROMPT + (
+    "\n\nYou are ALSO shown the rendered spectrum chart for this product (a "
+    "wavelength-vs-flux line plot). Use it only for qualitative visual "
+    "corroboration: overall continuum shape, how noisy it looks, obvious "
+    "peaks/dips or a sloping baseline. The deterministic measurements above "
+    "remain authoritative — never read or infer numeric values from the chart, "
+    "do not identify spectral lines, and never contradict the measurements. If "
+    "the chart and the numbers disagree, defer to the numbers and add a "
+    "quality_flag noting the mismatch."
+)
+
+
 def build_user_prompt(payload: dict) -> str:
     """Render the product/observation/measurements payload into the user turn.
 

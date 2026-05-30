@@ -64,7 +64,10 @@ class AiProvider(Protocol):
         user: str,
         max_tokens: int,
         temperature: float,
+        image: bytes | None = None,
+        image_media_type: str = "image/png",
     ) -> AiCompletion:
-        """Single-turn completion requesting structured JSON output. Maps
+        """Single-turn completion requesting structured JSON output. When `image`
+        is given (Phase 5.5 vision), it's attached to the user turn. Maps
         transport failures to `AiError` (permanent vs. transient)."""
         ...

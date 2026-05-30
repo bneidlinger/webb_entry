@@ -138,3 +138,22 @@ def test_health_down_is_not_ok():
     h = _provider(_FakeClient(models_ok=False)).health()
     assert h.ok is False
     assert "connection refused" in h.detail
+
+
+def test_complete_with_image_sends_multimodal_content():
+    client = _FakeClient(outcome='{"summary": "ok"}')
+    out = _provider(client).complete(
+        system="S", user="U", max_tokens=10, temperature=0.0, image=b"\x89PNGfake"
+    )
+    assert out.text == '{"summary": "ok"}'
+    content = client.chat.completions.last_kwargs["messages"][1]["content"]
+    assert isinstance(content, list)
+    assert content[0] == {"type": "text", "text": "U"}
+    assert content[1]["type"] == "image_url"
+    assert content[1]["image_url"]["url"].startswith("data:image/png;base64,")
+
+
+def test_complete_without_image_sends_plain_text_content():
+    client = _FakeClient(outcome="{}")
+    _provider(client).complete(system="S", user="U", max_tokens=10, temperature=0.0)
+    assert client.chat.completions.last_kwargs["messages"][1]["content"] == "U"

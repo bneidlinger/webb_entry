@@ -87,3 +87,23 @@ def test_spectrum_user_prompt_includes_features():
     prompt = spectrum_summary_v1.build_user_prompt(_spectrum_payload())
     for needle in ["WASP-39b", "NIRSPEC", "GTO-2", "um", "jwst_1300.pmap"]:
         assert needle in prompt, needle
+
+
+def test_vision_prompt_constants_present():
+    assert image_summary_v1.VISION_PROMPT_VERSION == "v1"
+    assert spectrum_summary_v1.VISION_PROMPT_VERSION == "v1"
+
+
+def test_image_vision_prompt_extends_base_with_guardrails():
+    vsys = image_summary_v1.VISION_SYSTEM_PROMPT
+    assert image_summary_v1.SYSTEM_PROMPT in vsys  # built on the text prompt
+    assert "image" in vsys.lower()
+    assert "authoritative" in vsys.lower()
+    assert "never" in vsys.lower()
+
+
+def test_spectrum_vision_prompt_warns_against_reading_chart():
+    vsys = spectrum_summary_v1.VISION_SYSTEM_PROMPT
+    assert spectrum_summary_v1.SYSTEM_PROMPT in vsys
+    assert "chart" in vsys.lower()
+    assert "authoritative" in vsys.lower()

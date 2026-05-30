@@ -74,3 +74,22 @@ def test_local_filesystem_upload_overwrites(tmp_path):
     backend.upload(data=b"v1", key="a.png")
     backend.upload(data=b"v2", key="a.png")
     assert (tmp_path / "a.png").read_bytes() == b"v2"
+
+
+def test_local_filesystem_read_round_trip(tmp_path):
+    backend = LocalFilesystemStorage(root_dir=tmp_path, public_url_base="http://x")
+    backend.upload(data=b"png-bytes", key="42/full.png")
+    assert backend.read("42/full.png") == b"png-bytes"
+
+
+def test_local_filesystem_read_rejects_unsafe(tmp_path):
+    backend = LocalFilesystemStorage(root_dir=tmp_path, public_url_base="http://x")
+    with pytest.raises(ValueError):
+        backend.read("../escape")
+
+
+def test_preview_storage_key_layout():
+    from app.services.storage import preview_storage_key
+
+    assert preview_storage_key(42, "full") == "42/full.png"
+    assert preview_storage_key(7, "thumbnail") == "7/thumbnail.png"

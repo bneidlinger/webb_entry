@@ -27,9 +27,12 @@ log = logging.getLogger(__name__)
 
 
 class PreviewStorage(Protocol):
-    """Minimal upload-and-return-URL interface."""
+    """Upload-and-return-URL, plus read-back (Phase 5.5 vision needs the bytes)."""
 
     def upload(self, *, data: bytes, key: str, content_type: str = "image/png") -> str:
+        ...
+
+    def read(self, key: str) -> bytes:
         ...
 
 
@@ -55,6 +58,10 @@ class LocalFilesystemStorage:
         log.debug("local preview upload key=%s bytes=%d url=%s", safe_key, len(data), url)
         return url
 
+    def read(self, key: str) -> bytes:
+        """Read back the bytes previously written under `key` (same traversal guard)."""
+        return (self.root_dir / _safe_relative_key(key)).read_bytes()
+
 
 @dataclass
 class AzureBlobStorage:
@@ -64,20 +71,22 @@ class AzureBlobStorage:
     connection_string: str | None = None
     account_url: str | None = None
 
-    def upload(self, *, data: bytes, key: str, content_type: str = "image/png") -> str:
+    def _service(self):  # pragma: no cover — needs a real Azure/Azurite endpoint
         from azure.identity import DefaultAzureCredential
-        from azure.storage.blob import BlobServiceClient, ContentSettings
+        from azure.storage.blob import BlobServiceClient
 
         if self.connection_string:
-            service = BlobServiceClient.from_connection_string(self.connection_string)
-        elif self.account_url:
-            service = BlobServiceClient(
+            return BlobServiceClient.from_connection_string(self.connection_string)
+        if self.account_url:
+            return BlobServiceClient(
                 account_url=self.account_url, credential=DefaultAzureCredential()
             )
-        else:  # pragma: no cover — guarded by get_preview_storage
-            raise RuntimeError("AzureBlobStorage needs a connection string or account URL")
+        raise RuntimeError("AzureBlobStorage needs a connection string or account URL")
 
-        container = service.get_container_client(self.container_name)
+    def upload(self, *, data: bytes, key: str, content_type: str = "image/png") -> str:
+        from azure.storage.blob import ContentSettings
+
+        container = self._service().get_container_client(self.container_name)
         with contextlib.suppress(Exception):
             container.create_container()
 
@@ -94,6 +103,10 @@ class AzureBlobStorage:
             len(data),
         )
         return blob.url
+
+    def read(self, key: str) -> bytes:  # pragma: no cover — needs a real endpoint
+        container = self._service().get_container_client(self.container_name)
+        return container.get_blob_client(key).download_blob().readall()
 
 
 # ---------------------------------------------------------------------------
@@ -124,6 +137,16 @@ def local_preview_root(settings: Settings | None = None) -> Path:
     """
     # Always relative to services/api/preview_cache regardless of cwd.
     return Path(__file__).resolve().parents[2] / "preview_cache"
+
+
+def preview_storage_key(product_id: int, variant: str) -> str:
+    """Storage key for a product's preview variant.
+
+    Single source for the layout used by `preview_job` (upload) and `ai_job`
+    (read-back for Phase 5.5 vision): a POSIX-style relative path under the
+    previews root, e.g. ``42/full.png``.
+    """
+    return f"{product_id}/{variant}.png"
 
 
 def get_preview_storage(settings: Settings) -> PreviewStorage:

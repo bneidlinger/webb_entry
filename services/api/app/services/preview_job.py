@@ -46,7 +46,11 @@ from app.services.previews import (
     is_supported,
     render_preview,
 )
-from app.services.storage import PreviewStorage, get_preview_storage
+from app.services.storage import (
+    PreviewStorage,
+    get_preview_storage,
+    preview_storage_key,
+)
 
 log = logging.getLogger(__name__)
 
@@ -152,7 +156,7 @@ def _run(
     # ---- upload + persist -----------------------------------------------
     uploaded: list[str] = []
     for variant, (data, width, height) in rendered.items():
-        key = f"{product.id}/{variant}.png"
+        key = preview_storage_key(product.id, variant)
         try:
             url = storage.upload(data=data, key=key, content_type="image/png")
         except Exception as e:  # noqa: BLE001 — Azure/network/io issues

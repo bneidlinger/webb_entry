@@ -80,6 +80,11 @@ class Settings(BaseSettings):
     ollama_base_url: str = Field(default="http://localhost:11434/v1")
     local_ai_enable: bool = Field(default=False)
     local_ai_model: str = Field(default="llama3.1:8b-instruct-q4_K_M")
+    # Phase 5.5: vision is opt-in + on-demand (a heavier multimodal model). On an
+    # 8 GB GPU Ollama swaps between the text and vision models, so we don't
+    # auto-run it. Default fits 8 GB; llama3.2-vision:11b is better on >=12 GB.
+    local_ai_vision_enable: bool = Field(default=False)
+    local_ai_vision_model: str = Field(default="llava:7b")
     local_ai_max_tokens: int = Field(default=1024)
     local_ai_temperature: float = Field(default=0.2)
     local_ai_request_timeout_seconds: int = Field(default=120)
