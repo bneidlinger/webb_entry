@@ -47,7 +47,7 @@ services/api/            FastAPI + SQLAlchemy + Alembic + CLI
 services/worker/         RQ + rq-scheduler; preview_gen + analyze_product + mast_poll + s3_listing jobs
 packages/shared/         JSON Schema + TS types for cross-language contracts
 infra/docker-compose.yml Postgres + Redis + Azurite + api + worker + web
-docs/                    azure-deployment.md, local-dev-without-docker.md
+docs/                    HANDOFF.md, azure-deployment.md, local-dev-without-docker.md, ollama_setup.md
 ```
 
 ## Local dev
@@ -83,6 +83,8 @@ With Docker (once Docker Desktop is installed):
 Copy-Item .env.example .env
 docker compose -f infra/docker-compose.yml up --build
 ```
+
+**Local AI (Ollama).** To run the Phase 5/5.5 local AI summaries (text + on-demand vision) on your machine, see [`docs/ollama_setup.md`](docs/ollama_setup.md).
 
 ## Conventions
 
