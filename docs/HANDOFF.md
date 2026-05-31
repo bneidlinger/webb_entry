@@ -59,7 +59,9 @@ services/api/app/
     watchlist.py, alert.py          # Phase 2 schema.
     data_product_preview.py         # Phase 3 schema (one row per (product, variant)).
     data_product_analysis.py        # Phase 4 schema (one row per (product, analyzer, version)).
+    ai_report.py                    # Phase 5/5.5 schema (one row per (product, mode, model_name, prompt_version)).
   clients/mast.py                  # Astroquery wrapper. assemble() is pure.
+  clients/ai/                      # Phase 0 cloud stub (async, UNUSED). Phase 6 reshapes onto services/ai/base.
   services/
     ingest.py                      # Upsert + alert hook + preview/analysis enqueue. The hot path.
     match.py                       # Pure function: (product, obs, criteria) -> (bool, reason).
@@ -76,11 +78,19 @@ services/api/app/
       __init__.py                  # get_analyzer_for(product_type) dispatch.
     analysis_types.py              # Light: is_analyzable(). No scipy import.
     analysis_job.py                # Orchestration: fetch → analyze → persist.
-    storage.py                     # Local fs / Azure Blob backends.
-    queue.py                       # Soft-import rq + best-effort enqueue (preview + analysis).
+    ai/                            # Phase 5: local AI provider + prompts + report schema.
+      base.py                      # AiProvider protocol (SYNC), AiError, AiCompletion.
+      local.py                     # OllamaProvider (openai SDK; image= → vision).
+      schemas.py                   # AiReportPayload (plan §7) + tolerant parse_ai_report.
+      prompts/                     # image/spectrum _v1: SYSTEM_PROMPT + VISION_SYSTEM_PROMPT.
+      __init__.py                  # get_ai_provider(settings, vision=) factory.
+    ai_job.py                      # Phase 5/5.5: narrate measurements (+preview for vision) → AiReport.
+    storage.py                     # Local fs / Azure Blob backends. upload() + read() (read added for vision).
+    queue.py                       # Soft-import rq + enqueue (preview + analysis + ai, incl. vision).
   routes/                          # FastAPI routers, one per resource.
     previews.py                    # Serves local-fs PNGs at /api/previews/{path}.
     analyses.py                    # GET /api/products/{id}/analysis.
+    ai_reports.py                  # GET /api/products/{id}/ai-reports + POST .../regenerate(?vision).
   schemas/                         # Pydantic response models.
   cli/                             # Typer subcommands. Entry: python -m app
 
@@ -93,12 +103,13 @@ services/worker/worker/
     s3_jwst_listing.py             # 6-h: anonymous list, detect unknown keys.
     preview_gen.py                 # Thin re-export of app.services.preview_job.generate_for_product.
     analyze_product.py             # Thin re-export of app.services.analysis_job.generate_analysis_for_product.
+    ai_report.py                   # Thin re-export of app.services.ai_job.generate_ai_report_for_product.
 
 apps/web/
   app/page.tsx                     # Feed (server component).
   app/alerts/page.tsx              # Alerts (server component).
-  app/products/[id]/page.tsx       # Phase 4 detail page (server component, parallel-fetches product + analysis).
-  components/                      # ProductFeed, AlertFeed, HealthBadge.
+  app/products/[id]/page.tsx       # Detail page: product + analysis + AI reports (text + vision cards).
+  components/                      # ProductFeed, AlertFeed, HealthBadge, RegenerateAiButton (client; text + vision).
   lib/api.ts                       # Typed fetch wrappers + Result<T>.
 ```
 
@@ -495,6 +506,58 @@ On-demand local vision (4 commits `360a73b..` on `main`). A multimodal model als
 - **Vision prompts:** `VISION_SYSTEM_PROMPT` + `VISION_PROMPT_VERSION` per prompt module — base guardrails plus "corroborate visually, the measurements stay authoritative, never read numbers off the image".
 - **Config:** `LOCAL_AI_VISION_ENABLE` (default off), `LOCAL_AI_VISION_MODEL` (`llava:7b`; `llama3.2-vision:11b` for ≥12 GB). `get_ai_provider(vision=)` picks the model. The vision job adds `vision_disabled` + `no_preview` skips to the Phase 5 guard set; an unreadable preview is transient.
 - **What we don't do:** auto-run vision per match (model-swap thrash); a spectrum is eligible too (its chart is the image). Cloud vision is Phase 6.
+
+---
+
+## 7d. Phase 6 directions — cloud AI review (next)
+
+Plan reference: [plan §11 Phase 6](../webbwatch_ai_project_plan.md) (scope), [plan §6](../webbwatch_ai_project_plan.md) (cloud AI role + OpenAI vs Azure OpenAI provider interface), [plan §7](../webbwatch_ai_project_plan.md) (report schema). **This is the contract for the next session — but the decisions below are *recommendations, not locked*.** There has been no Phase 6 decision conversation yet (unlike Phase 5's §7c.1); confirm §7d.4 with the user before coding.
+
+### 7d.0 What Phase 6 is
+
+Add an optional **cloud** AI pass (OpenAI **or** Azure OpenAI) as a second `AiProvider`, plus a **reviewer mode** where the cloud model critiques the local report and flags unsupported claims (plan §11). Same facts-first principle (plan §6/§13): the cloud model sees measurements + preview + (for reviewer mode) the local report — never raw FITS. Cost is real here, so it's opt-in + estimated.
+
+### 7d.1 What's already in place to build on (do NOT rebuild)
+
+- **The `AiProvider` protocol is the seam** (`app/services/ai/base.py`, sync). A cloud provider implements the same `complete(*, system, user, max_tokens, temperature, image=, ...)`. Image support already exists (base64 data URI), so cloud vision is the same call.
+- **`ai_reports.mode` already generalizes** — Phase 6 is `mode="cloud"` (+ e.g. `"cloud_review"` for reviewer mode). **No migration** for the basic cloud pass; GET returns latest per `(mode, model_name)` and the frontend already renders any number of report cards (add a `mode` chip like the vision one).
+- **The Phase 0 `app/clients/ai/` stub is the thing to reshape** — `CloudAIProvider` (async) + OpenAI + Azure adapters + `get_cloud_ai_provider` factory keyed on `AI_PROVIDER`, **zero live callers**. Fold it onto `services/ai/base.AiProvider` rather than keep two hierarchies. Config already exists: `AI_PROVIDER`, `OPENAI_API_KEY/MODEL`, `AZURE_OPENAI_*`.
+- **`ai_job._run` is already parametrized by mode** (text vs vision). A cloud pass is another branch of the same pass-spec — don't fork a new orchestrator. `enqueue_ai_report` + the `analyze` queue + the regenerate route extend the same way.
+- **Tests mock the client** — `test_ai_local_provider` injects a fake `OpenAI` client; the cloud provider takes the same `client=` seam.
+
+### 7d.2 Architectural calls (recommended, confirm in §7d.4)
+
+- **Generalize the pass-spec, don't add a third job function.** `ai_job._run(vision=)` → a `(mode, model_name, prompt_version, system_prompt, with_image)` spec so local / vision / cloud / reviewer all share guards + idempotency + persistence.
+- **Cloud is on-demand + cost-gated**, like vision — a "Cloud review" button, never auto per match (plan §14 cost risk). Show an estimate before running.
+- **Reviewer mode is its own `mode`** whose payload includes the local `report_json` + measurements; the prompt asks the model to flag unsupported claims and suggest checks. Its own `ai_reports` row.
+- **Reuse `AiReportPayload`** so cloud/review cards need no new frontend components.
+
+### 7d.3 Likely shape — files
+
+`app/services/ai/cloud.py` (reshape `clients/ai/*` into it) implementing `AiProvider`; `get_ai_provider` gains cloud selection via `AI_PROVIDER`. A cost-estimate helper + where to persist `cost_estimate` (plan §8 had it on `analysis_runs`; we don't persist cost yet — new column on `ai_reports` or stash in `report_json["model_notes"]`). Reviewer prompt module(s) under `prompts/`. Routes: extend regenerate (`?mode=`) or add `POST .../ai-reports/cloud-review`. Frontend: cloud + review buttons, side-by-side local-vs-cloud view (plan §11). Tests mock the OpenAI/Azure client.
+
+### 7d.4 Open questions to resolve with the user before coding
+
+1. **Sync vs async cloud.** Shared `AiProvider` is sync (worker context); the Phase 0 stub is async. Recommend **sync** (run cloud in the worker like local; the SDK supports both).
+2. **OpenAI, Azure OpenAI, or both at launch?** `AI_PROVIDER` already switches. Build/test only what the user has keys for.
+3. **Cost surface.** New `cost_estimate` column on `ai_reports` vs inside `model_notes`? Per-user quotas now or defer to Phase 8 auth?
+4. **Reviewer mode scope.** Full plan §11 (critique + flag unsupported claims + follow-ups) vs a thinner "second opinion" first.
+5. **Cloud vision** auto or on-demand? Recommend on-demand (it costs $$).
+
+### 7d.5 Deferred past Phase 6 (per plan)
+
+Public shareable feed + social (Phase 7); auth + rate limiting + Key Vault + Azure deploy (Phase 8). Multi-product comparison needs a related-products query (plan §5.C).
+
+### 7d.6 Pitfalls to expect
+
+- **Secrets**: real OpenAI/Azure keys must never touch `.env.example` or git (push protection). Local `.env` only.
+- **Azure OpenAI uses a *deployment name*, not a model id**, and requires an API version — already modeled (`AZURE_OPENAI_DEPLOYMENT_*`, `AZURE_OPENAI_API_VERSION`).
+- **Structured output**: OpenAI supports real JSON-schema response formats — prefer that, but keep `parse_ai_report` as the fallback.
+- **Don't snapshot cloud output** — mock the client, assert request shape + validate response shape (same as local).
+
+### 7d.7 Suggested commit order
+
+1. Reshape `clients/ai` → a cloud provider implementing `services/ai/base.AiProvider` + `get_ai_provider` cloud selection + provider tests (mocked client). 2. Generalize `ai_job` pass-spec + `mode="cloud"` + enqueue/route wiring + tests. 3. Reviewer mode (`mode="cloud_review"`, prompt, payload includes the local report). 4. Cost estimate + frontend (cloud/review buttons, side-by-side local-vs-cloud). 5. Docs (this §7d → "shipped", parallel to §7c).
 
 ---
 
