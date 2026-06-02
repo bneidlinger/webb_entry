@@ -19,6 +19,13 @@ from app.config import get_settings
 from app.db import get_session
 from app.models import AiReport, DataProduct
 from app.schemas.ai_report import AiReportRead, RegenerateResponse
+from app.services.ai import cloud_config_error
+from app.services.ai_modes import (
+    ALL_MODES,
+    is_cloud_mode,
+    mode_disabled_reason,
+    mode_enabled,
+)
 from app.services.queue import enqueue_ai_report
 
 router = APIRouter(prefix="/api/products", tags=["ai-reports"])
@@ -60,22 +67,30 @@ def get_product_ai_reports(
 )
 def regenerate_ai_report(
     product_id: int,
+    mode: str = "local",
     vision: bool = False,
     session: Session = Depends(get_session),
 ) -> RegenerateResponse:
     if session.get(DataProduct, product_id) is None:
         raise HTTPException(status_code=404, detail="product not found")
 
-    # Distinguish "feature off" from "worker/Redis down" for a useful UI message.
+    # Back-compat: ?vision=true is an alias for mode=local_vision.
+    if vision and mode == "local":
+        mode = "local_vision"
+    if mode not in ALL_MODES:
+        raise HTTPException(status_code=422, detail=f"unknown mode: {mode!r}")
+
+    # Distinguish "feature off" / "not configured" from "worker down" for the UI.
     settings = get_settings()
-    enabled = settings.local_ai_vision_enable if vision else settings.local_ai_enable
-    if not enabled:
+    if not mode_enabled(settings, mode):
         return RegenerateResponse(
-            status="skipped",
-            enqueued=False,
-            reason="vision_disabled" if vision else "local_ai_disabled",
+            status="skipped", enqueued=False, reason=mode_disabled_reason(mode)
         )
-    if enqueue_ai_report(product_id, force=True, vision=vision):
+    if is_cloud_mode(mode) and cloud_config_error(settings) is not None:
+        return RegenerateResponse(
+            status="skipped", enqueued=False, reason="cloud_not_configured"
+        )
+    if enqueue_ai_report(product_id, force=True, mode=mode):
         return RegenerateResponse(status="enqueued", enqueued=True)
     return RegenerateResponse(
         status="skipped", enqueued=False, reason="queue_unavailable"

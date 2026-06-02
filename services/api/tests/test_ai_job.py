@@ -51,7 +51,13 @@ class _FakeProvider:
         return AiCompletion(text=self._text or "", model="test-model")
 
 
-def _settings(*, enable: bool = True, vision_enable: bool = False) -> Settings:
+def _settings(
+    *,
+    enable: bool = True,
+    vision_enable: bool = False,
+    cloud_enable: bool = False,
+    cloud_configured: bool = True,
+) -> Settings:
     return Settings(
         local_ai_enable=enable,
         local_ai_vision_enable=vision_enable,
@@ -59,6 +65,11 @@ def _settings(*, enable: bool = True, vision_enable: bool = False) -> Settings:
         local_ai_vision_model="test-vision-model",
         local_ai_max_tokens=512,
         local_ai_temperature=0.0,
+        cloud_ai_enable=cloud_enable,
+        cloud_ai_max_tokens=600,
+        ai_provider="openai",
+        openai_api_key="sk-test" if cloud_configured else "",
+        openai_model="cloud-model",
     )
 
 
@@ -337,7 +348,7 @@ def test_vision_disabled_skips(session, monkeypatch):
     _enable(monkeypatch, enable=True, vision_enable=False)
     prod = _seed_product(session)
     _add_analysis(session, prod)
-    assert ai_job._run(session, prod.id, vision=True)["reason"] == "vision_disabled"
+    assert ai_job._run(session, prod.id, mode="local_vision")["reason"] == "vision_disabled"
 
 
 def test_vision_skips_when_no_preview(session, monkeypatch):
@@ -345,7 +356,7 @@ def test_vision_skips_when_no_preview(session, monkeypatch):
     _install(monkeypatch, _FakeProvider(text=_VALID_JSON))
     prod = _seed_product(session)
     _add_analysis(session, prod)  # analysis present, but no preview rendered yet
-    assert ai_job._run(session, prod.id, vision=True)["reason"] == "no_preview"
+    assert ai_job._run(session, prod.id, mode="local_vision")["reason"] == "no_preview"
 
 
 def test_vision_success_attaches_image_and_writes_vision_row(session, monkeypatch):
@@ -356,7 +367,7 @@ def test_vision_success_attaches_image_and_writes_vision_row(session, monkeypatc
     _add_analysis(session, prod)
     _add_full_preview(session, prod)
 
-    result = ai_job._run(session, prod.id, vision=True)
+    result = ai_job._run(session, prod.id, mode="local_vision")
     session.commit()
 
     assert result["status"] == "ok"
@@ -378,8 +389,8 @@ def test_vision_and_text_reports_coexist(session, monkeypatch):
     _add_analysis(session, prod)
     _add_full_preview(session, prod)
 
-    ai_job._run(session, prod.id, vision=False)  # text
-    ai_job._run(session, prod.id, vision=True)  # vision
+    ai_job._run(session, prod.id, mode="local")  # text
+    ai_job._run(session, prod.id, mode="local_vision")  # vision
     session.commit()
     session.refresh(prod)
 
@@ -394,11 +405,11 @@ def test_vision_idempotent(session, monkeypatch):
     prod = _seed_product(session)
     _add_analysis(session, prod)
     _add_full_preview(session, prod)
-    ai_job._run(session, prod.id, vision=True)
+    ai_job._run(session, prod.id, mode="local_vision")
     session.commit()
 
     _install(monkeypatch, _FakeProvider(error=AssertionError("should not regenerate")))
-    assert ai_job._run(session, prod.id, vision=True)["reason"] == "already_generated"
+    assert ai_job._run(session, prod.id, mode="local_vision")["reason"] == "already_generated"
 
 
 def test_vision_unreadable_preview_is_transient(session, monkeypatch):
@@ -409,7 +420,7 @@ def test_vision_unreadable_preview_is_transient(session, monkeypatch):
     _add_analysis(session, prod)
     _add_full_preview(session, prod)
 
-    result = ai_job._run(session, prod.id, vision=True)
+    result = ai_job._run(session, prod.id, mode="local_vision")
     session.commit()
     session.refresh(prod)
 
@@ -418,3 +429,103 @@ def test_vision_unreadable_preview_is_transient(session, monkeypatch):
     row = next(r for r in prod.ai_reports if r.mode == "local_vision")
     assert row.is_permanent_failure is False
     assert "preview_unreadable" in row.last_error
+
+
+# ---- cloud (Phase 6) ------------------------------------------------------
+
+
+def test_cloud_disabled_skips(session, monkeypatch):
+    _enable(monkeypatch, cloud_enable=False)
+    _install(monkeypatch, _FakeProvider(error=AssertionError("must not call provider")))
+    prod = _seed_product(session)
+    _add_analysis(session, prod)
+    assert ai_job._run(session, prod.id, mode="cloud")["reason"] == "cloud_ai_disabled"
+
+
+def test_cloud_not_configured_skips(session, monkeypatch):
+    _enable(monkeypatch, cloud_enable=True, cloud_configured=False)
+    _install(monkeypatch, _FakeProvider(error=AssertionError("must not call provider")))
+    prod = _seed_product(session)
+    _add_analysis(session, prod)
+    assert ai_job._run(session, prod.id, mode="cloud")["reason"] == "cloud_not_configured"
+
+
+def test_cloud_success_writes_cloud_row(session, monkeypatch):
+    _enable(monkeypatch, cloud_enable=True)
+    provider = _install(monkeypatch, _FakeProvider(text=_VALID_JSON))
+    prod = _seed_product(session)
+    _add_analysis(session, prod)
+
+    result = ai_job._run(session, prod.id, mode="cloud")
+    session.commit()
+    session.refresh(prod)
+
+    assert result["status"] == "ok"
+    assert result["mode"] == "cloud"
+    assert result["model_name"] == "cloud-model"
+    row = next(r for r in prod.ai_reports if r.mode == "cloud")
+    assert row.model_name == "cloud-model"
+    assert row.report_json["model_notes"]["mode"] == "cloud"
+    # Cloud uses the cloud token budget, not the local one.
+    assert provider.calls[0]["max_tokens"] == 600
+
+
+def test_cloud_and_local_reports_coexist(session, monkeypatch):
+    _enable(monkeypatch, enable=True, cloud_enable=True)
+    _install(monkeypatch, _FakeProvider(text=_VALID_JSON))
+    prod = _seed_product(session)
+    _add_analysis(session, prod)
+
+    ai_job._run(session, prod.id, mode="local")
+    ai_job._run(session, prod.id, mode="cloud")
+    session.commit()
+    session.refresh(prod)
+
+    assert {r.mode for r in prod.ai_reports} == {"local", "cloud"}
+    assert len(prod.ai_reports) == 2
+
+
+def test_cloud_idempotent(session, monkeypatch):
+    _enable(monkeypatch, cloud_enable=True)
+    _install(monkeypatch, _FakeProvider(text=_VALID_JSON))
+    prod = _seed_product(session)
+    _add_analysis(session, prod)
+    ai_job._run(session, prod.id, mode="cloud")
+    session.commit()
+
+    _install(monkeypatch, _FakeProvider(error=AssertionError("should not regenerate")))
+    assert ai_job._run(session, prod.id, mode="cloud")["reason"] == "already_generated"
+
+
+def test_cloud_unreachable_is_transient(session, monkeypatch):
+    _enable(monkeypatch, cloud_enable=True)
+    _install(
+        monkeypatch, _FakeProvider(error=AiError("cloud_unreachable: down", is_permanent=False))
+    )
+    prod = _seed_product(session)
+    _add_analysis(session, prod)
+
+    result = ai_job._run(session, prod.id, mode="cloud")
+    session.commit()
+    session.refresh(prod)
+
+    assert result["is_permanent"] is False
+    row = next(r for r in prod.ai_reports if r.mode == "cloud")
+    assert row.is_permanent_failure is False
+    assert "unreachable" in row.last_error
+
+
+def test_cloud_auth_error_is_permanent(session, monkeypatch):
+    _enable(monkeypatch, cloud_enable=True)
+    _install(
+        monkeypatch, _FakeProvider(error=AiError("cloud_auth_error: bad key", is_permanent=True))
+    )
+    prod = _seed_product(session)
+    _add_analysis(session, prod)
+
+    result = ai_job._run(session, prod.id, mode="cloud")
+    session.commit()
+    session.refresh(prod)
+
+    assert result["is_permanent"] is True
+    assert next(r for r in prod.ai_reports if r.mode == "cloud").is_permanent_failure is True

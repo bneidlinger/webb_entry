@@ -132,10 +132,10 @@ def test_regenerate_enqueues_when_enabled(client, product, monkeypatch):
     monkeypatch.setattr(
         ai_reports_route, "get_settings", lambda: Settings(local_ai_enable=True)
     )
-    calls: list[tuple[int, bool, bool]] = []
+    calls: list[tuple[int, bool, str]] = []
 
-    def _fake(product_id, *, force=False, vision=False):
-        calls.append((product_id, force, vision))
+    def _fake(product_id, *, force=False, mode="local"):
+        calls.append((product_id, force, mode))
         return True
 
     monkeypatch.setattr(ai_reports_route, "enqueue_ai_report", _fake)
@@ -143,7 +143,7 @@ def test_regenerate_enqueues_when_enabled(client, product, monkeypatch):
     res = client.post(f"/api/products/{product.id}/ai-reports/regenerate")
     assert res.status_code == 202
     assert res.json() == {"status": "enqueued", "enqueued": True, "reason": None}
-    assert calls == [(product.id, True, False)]  # forced text pass
+    assert calls == [(product.id, True, "local")]  # forced text pass
 
 
 def test_regenerate_queue_unavailable(client, product, monkeypatch):
@@ -172,14 +172,61 @@ def test_regenerate_vision_enqueues_when_enabled(client, product, monkeypatch):
     monkeypatch.setattr(
         ai_reports_route, "get_settings", lambda: Settings(local_ai_vision_enable=True)
     )
-    calls: list[tuple[int, bool, bool]] = []
+    calls: list[tuple[int, bool, str]] = []
 
-    def _fake(product_id, *, force=False, vision=False):
-        calls.append((product_id, force, vision))
+    def _fake(product_id, *, force=False, mode="local"):
+        calls.append((product_id, force, mode))
         return True
 
     monkeypatch.setattr(ai_reports_route, "enqueue_ai_report", _fake)
     res = client.post(f"/api/products/{product.id}/ai-reports/regenerate?vision=true")
     assert res.status_code == 202
     assert res.json()["enqueued"] is True
-    assert calls == [(product.id, True, True)]  # forced + vision
+    assert calls == [(product.id, True, "local_vision")]  # alias -> local_vision
+
+
+# ---- POST regenerate: cloud modes (Phase 6) -------------------------------
+
+
+def test_regenerate_cloud_skipped_when_disabled(client, product, monkeypatch):
+    monkeypatch.setattr(
+        ai_reports_route, "get_settings", lambda: Settings(cloud_ai_enable=False)
+    )
+    res = client.post(f"/api/products/{product.id}/ai-reports/regenerate?mode=cloud")
+    assert res.status_code == 202
+    assert res.json()["reason"] == "cloud_ai_disabled"
+
+
+def test_regenerate_cloud_not_configured(client, product, monkeypatch):
+    monkeypatch.setattr(
+        ai_reports_route,
+        "get_settings",
+        lambda: Settings(cloud_ai_enable=True, ai_provider="openai", openai_api_key=""),
+    )
+    res = client.post(f"/api/products/{product.id}/ai-reports/regenerate?mode=cloud")
+    assert res.status_code == 202
+    assert res.json()["reason"] == "cloud_not_configured"
+
+
+def test_regenerate_cloud_enqueues_when_configured(client, product, monkeypatch):
+    monkeypatch.setattr(
+        ai_reports_route,
+        "get_settings",
+        lambda: Settings(cloud_ai_enable=True, ai_provider="openai", openai_api_key="sk-test"),
+    )
+    calls: list[tuple[int, bool, str]] = []
+
+    def _fake(product_id, *, force=False, mode="local"):
+        calls.append((product_id, force, mode))
+        return True
+
+    monkeypatch.setattr(ai_reports_route, "enqueue_ai_report", _fake)
+    res = client.post(f"/api/products/{product.id}/ai-reports/regenerate?mode=cloud")
+    assert res.status_code == 202
+    assert res.json()["enqueued"] is True
+    assert calls == [(product.id, True, "cloud")]
+
+
+def test_regenerate_unknown_mode_is_422(client, product):
+    res = client.post(f"/api/products/{product.id}/ai-reports/regenerate?mode=bogus")
+    assert res.status_code == 422

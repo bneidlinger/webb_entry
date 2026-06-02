@@ -51,10 +51,21 @@ def test_vision_gate_independent_of_text_gate(monkeypatch):
         raise AssertionError("must not touch Redis when LOCAL_AI_VISION_ENABLE is off")
 
     monkeypatch.setattr(queue, "_try_connect", _boom)
-    assert queue.enqueue_ai_report(1, vision=True) is False
+    assert queue.enqueue_ai_report(1, mode="local_vision") is False
 
 
 def test_vision_enabled_but_redis_unreachable_returns_false(monkeypatch):
     monkeypatch.setattr(queue, "get_settings", lambda: _settings(vision_enable=True))
     monkeypatch.setattr(queue, "_try_connect", lambda: None)
-    assert queue.enqueue_ai_report(1, vision=True) is False
+    assert queue.enqueue_ai_report(1, mode="local_vision") is False
+
+
+def test_cloud_gate_independent_of_local(monkeypatch):
+    # Local enabled, cloud disabled → cloud enqueue short-circuits before Redis.
+    monkeypatch.setattr(queue, "get_settings", lambda: _settings(enable=True))
+
+    def _boom():
+        raise AssertionError("must not touch Redis when CLOUD_AI_ENABLE is off")
+
+    monkeypatch.setattr(queue, "_try_connect", _boom)
+    assert queue.enqueue_ai_report(1, mode="cloud") is False

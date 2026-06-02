@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 
 from app.config import get_settings
+from app.services.ai_modes import mode_enabled
 from app.services.analysis_types import is_analyzable
 from app.services.preview_types import is_supported
 
@@ -116,21 +117,19 @@ def enqueue_analyze_product(product_id: int, product_type: str | None = None) ->
 
 
 def enqueue_ai_report(
-    product_id: int, *, force: bool = False, vision: bool = False
+    product_id: int, *, force: bool = False, mode: str = "local"
 ) -> bool:
-    """Enqueue a local-AI-report job for `product_id`. Returns True on success.
+    """Enqueue an AI-report job for `product_id` in `mode`. Returns True on success.
 
-    Gated by LOCAL_AI_ENABLE (text) or LOCAL_AI_VISION_ENABLE (`vision=True`) —
-    returns False when the relevant mode is off, like the SNS endpoint, so dev
-    sessions without Ollama don't queue jobs that would only record failures.
-    Also returns False when rq/redis isn't importable or Redis is unreachable.
-    `force` re-runs even if a report already exists (the regenerate path);
-    `vision` runs the multimodal pass over the preview. The job layer enforces
-    the rest of the idempotency + sequencing rules.
+    Gated by the per-mode flag (LOCAL_AI_ENABLE / LOCAL_AI_VISION_ENABLE /
+    CLOUD_AI_ENABLE) via `mode_enabled` — returns False when the mode is off, like
+    the SNS endpoint, so dev sessions don't queue jobs that would only record
+    failures. Also returns False when rq/redis isn't importable or Redis is
+    unreachable. `force` re-runs even if a report already exists (the regenerate
+    path). The job layer enforces the rest of the idempotency + sequencing rules.
     """
     settings = get_settings()
-    enabled = settings.local_ai_vision_enable if vision else settings.local_ai_enable
-    if not enabled:
+    if not mode_enabled(settings, mode):
         return False
 
     conn = _try_connect()
@@ -145,7 +144,7 @@ def enqueue_ai_report(
             AI_REPORT_JOB,
             product_id,
             force,
-            vision,
+            mode,
             job_timeout=AI_JOB_TIMEOUT,
             result_ttl=PREVIEW_RESULT_TTL,
         )
@@ -154,9 +153,9 @@ def enqueue_ai_report(
         return False
 
     log.info(
-        "Enqueued AI report for product_id=%d (force=%s vision=%s)",
+        "Enqueued AI report for product_id=%d (force=%s mode=%s)",
         product_id,
         force,
-        vision,
+        mode,
     )
     return True

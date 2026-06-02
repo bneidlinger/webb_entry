@@ -4,18 +4,20 @@ The worker module `worker.jobs.ai_report` is a thin re-export of
 `generate_ai_report_for_product` so the RQ string
 `worker.jobs.ai_report.generate_ai_report_for_product` resolves the same
 callable. Logic lives here so the API venv (where tests run) can drive `_run`
-directly with a fake provider — no Ollama, no RQ.
+directly with a fake provider — no Ollama, no cloud key, no RQ.
 
 AI is the *second* pass: it narrates over the deterministic measurements the
 Phase 4 analyzers already computed (plan §6 + §13 — the model never sees FITS).
-Two modes share this flow:
-  - `mode="local"` (Phase 5, text): narrates over measurements + metadata.
-  - `mode="local_vision"` (Phase 5.5, on-demand): also attaches the full preview
-    PNG so a multimodal model can corroborate visually. Requires a preview.
+Several modes share this flow, resolved into a `_PassSpec`:
+  - `mode="local"`        — Ollama text pass over measurements + metadata.
+  - `mode="local_vision"` — Ollama multimodal pass (also attaches the preview PNG).
+  - `mode="cloud"`        — OpenAI / Azure OpenAI text pass (Phase 6). On-demand +
+    cost-gated; never auto-chained from ingest/analysis.
 
 Flow per product (per mode):
-  1. Skip if the mode is disabled, product missing, no successful analysis yet,
-     the measurements have no usable `kind`, or (vision only) no full preview.
+  1. Skip if the mode is disabled, a cloud mode isn't configured, the product is
+     missing, there's no successful analysis yet, the measurements have no usable
+     `kind`, or (vision only) no full preview.
   2. Resolve the prompt by analysis `kind`; identity is `(product, mode,
      model_name, prompt_version)`.
   3. Idempotency: skip a prior permanent failure or an existing report unless
@@ -26,12 +28,13 @@ Flow per product (per mode):
      `input_summary_json` (the exact payload sent).
 
 Failure model mirrors `analysis_job`: `AiError.is_permanent` decides recovery.
-Unreachable Ollama / unreadable preview is transient; unparseable/invalid output
-or a missing model is permanent.
+Unreachable model / unreadable preview / rate-limit is transient; unparseable or
+invalid output, a missing model, or bad cloud auth is permanent.
 """
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy import select
@@ -40,35 +43,60 @@ from sqlalchemy.orm import Session
 from app.config import Settings, get_settings
 from app.db import session_scope
 from app.models import AiReport, DataProduct, DataProductAnalysis, Observation
-from app.services.ai import AiError, get_ai_provider, parse_ai_report
+from app.services.ai import AiError, cloud_config_error, get_ai_provider, parse_ai_report
 from app.services.ai.prompts import get_prompt_for
+from app.services.ai_modes import (
+    MODE_CLOUD,
+    MODE_LOCAL,
+    MODE_LOCAL_VISION,
+    is_cloud_mode,
+    mode_disabled_reason,
+    mode_enabled,
+)
 from app.services.previews import VARIANT_FULL
 from app.services.storage import get_preview_storage, preview_storage_key
 
 log = logging.getLogger(__name__)
 
-MODE_LOCAL = "local"
-MODE_LOCAL_VISION = "local_vision"
+
+@dataclass(frozen=True)
+class _PassSpec:
+    """The resolved shape of one report pass — what to run and how to key it."""
+
+    mode: str
+    model_name: str
+    prompt_version: str
+    system_prompt: str
+    with_image: bool
+    is_cloud: bool
 
 
 def generate_ai_report_for_product(
-    product_id: int, force: bool = False, vision: bool = False
+    product_id: int, force: bool = False, mode: str = MODE_LOCAL
 ) -> dict:
     """RQ entry point. Returns a small summary dict (also useful for tests)."""
     with session_scope() as session:
-        return _run(session, product_id, force=force, vision=vision)
+        return _run(session, product_id, force=force, mode=mode)
 
 
 def _run(
-    session: Session, product_id: int, *, force: bool = False, vision: bool = False
+    session: Session, product_id: int, *, force: bool = False, mode: str = MODE_LOCAL
 ) -> dict:
     settings = get_settings()
-    enabled = settings.local_ai_vision_enable if vision else settings.local_ai_enable
-    if not enabled:
+
+    if not mode_enabled(settings, mode):
         return {
             "product_id": product_id,
             "status": "skipped",
-            "reason": "vision_disabled" if vision else "local_ai_disabled",
+            "reason": mode_disabled_reason(mode),
+        }
+
+    # Cloud modes: fail fast (no row) when no key/endpoint is configured.
+    if is_cloud_mode(mode) and cloud_config_error(settings) is not None:
+        return {
+            "product_id": product_id,
+            "status": "skipped",
+            "reason": "cloud_not_configured",
         }
 
     product = session.get(DataProduct, product_id)
@@ -89,12 +117,9 @@ def _run(
             "reason": "unsupported_kind",
         }
 
-    mode = MODE_LOCAL_VISION if vision else MODE_LOCAL
-    model_name = settings.local_ai_vision_model if vision else settings.local_ai_model
-    prompt_version = prompt.VISION_PROMPT_VERSION if vision else prompt.PROMPT_VERSION
-    system_prompt = prompt.VISION_SYSTEM_PROMPT if vision else prompt.SYSTEM_PROMPT
+    spec = _resolve_pass_spec(mode, prompt, settings)
 
-    existing = _find_existing(session, product_id, mode, model_name, prompt_version)
+    existing = _find_existing(session, product_id, spec.mode, spec.model_name, spec.prompt_version)
     if not force and existing and existing.is_permanent_failure:
         return {
             "product_id": product_id,
@@ -108,7 +133,7 @@ def _run(
             "reason": "already_generated",
         }
 
-    if vision and not _full_preview_ready(product):
+    if spec.with_image and not _full_preview_ready(product):
         # Vision narrates over the rendered image; nothing to show yet. Retry-
         # eligible — the preview job may still be running (on-demand: usually
         # already done by the time a user clicks).
@@ -119,12 +144,12 @@ def _run(
 
     # ---- call the model + validate output ------------------------------
     try:
-        image = _read_preview_bytes(settings, product) if vision else None
-        provider = get_ai_provider(settings, mode=mode)
+        image = _read_preview_bytes(settings, product) if spec.with_image else None
+        provider = get_ai_provider(settings, mode=spec.mode)
         completion = provider.complete(
-            system=system_prompt,
+            system=spec.system_prompt,
             user=prompt.build_user_prompt(payload),
-            max_tokens=settings.local_ai_max_tokens,
+            max_tokens=_max_tokens_for(spec, settings),
             temperature=settings.local_ai_temperature,
             image=image,
         )
@@ -133,9 +158,9 @@ def _run(
         _record_failure(
             session,
             product,
-            mode,
-            model_name,
-            prompt_version,
+            spec.mode,
+            spec.model_name,
+            spec.prompt_version,
             str(e),
             is_permanent=e.is_permanent,
         )
@@ -150,24 +175,67 @@ def _run(
     report_dict = report.model_dump()
     report_dict["model_notes"] = {
         "model": completion.model,
-        "prompt_version": prompt_version,
-        "mode": mode,
+        "prompt_version": spec.prompt_version,
+        "mode": spec.mode,
         "created_at": datetime.now(UTC).isoformat(),
     }
     _upsert_success(
-        session, product, mode, model_name, prompt_version, report_dict, payload
+        session, product, spec.mode, spec.model_name, spec.prompt_version, report_dict, payload
     )
 
     return {
         "product_id": product_id,
         "status": "ok",
-        "mode": mode,
-        "model_name": model_name,
-        "prompt_version": prompt_version,
+        "mode": spec.mode,
+        "model_name": spec.model_name,
+        "prompt_version": spec.prompt_version,
     }
 
 
 # ---------------------------------------------------------------------------
+
+
+def _resolve_pass_spec(mode: str, prompt, settings: Settings) -> _PassSpec:
+    """Map a `mode` + the kind-specific prompt module into a concrete pass."""
+    if mode == MODE_LOCAL:
+        return _PassSpec(
+            mode=MODE_LOCAL,
+            model_name=settings.local_ai_model,
+            prompt_version=prompt.PROMPT_VERSION,
+            system_prompt=prompt.SYSTEM_PROMPT,
+            with_image=False,
+            is_cloud=False,
+        )
+    if mode == MODE_LOCAL_VISION:
+        return _PassSpec(
+            mode=MODE_LOCAL_VISION,
+            model_name=settings.local_ai_vision_model,
+            prompt_version=prompt.VISION_PROMPT_VERSION,
+            system_prompt=prompt.VISION_SYSTEM_PROMPT,
+            with_image=True,
+            is_cloud=False,
+        )
+    if mode == MODE_CLOUD:
+        return _PassSpec(
+            mode=MODE_CLOUD,
+            model_name=_cloud_model_name(settings),
+            prompt_version=prompt.PROMPT_VERSION,
+            system_prompt=prompt.SYSTEM_PROMPT,
+            with_image=False,
+            is_cloud=True,
+        )
+    raise ValueError(f"unsupported mode: {mode}")
+
+
+def _cloud_model_name(settings: Settings) -> str:
+    """The cloud row's model_name: the OpenAI model id, or the Azure deployment."""
+    if settings.ai_provider == "openai":
+        return settings.openai_model
+    return settings.azure_openai_deployment_chat
+
+
+def _max_tokens_for(spec: _PassSpec, settings: Settings) -> int:
+    return settings.cloud_ai_max_tokens if spec.is_cloud else settings.local_ai_max_tokens
 
 
 def _latest_successful_analysis(
