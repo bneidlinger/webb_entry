@@ -16,8 +16,6 @@ and error mapping without a live server.
 """
 from __future__ import annotations
 
-import base64
-
 from openai import (
     APIConnectionError,
     APIError,
@@ -26,6 +24,7 @@ from openai import (
     OpenAI,
 )
 
+from app.services.ai._messages import build_user_content
 from app.services.ai.base import AiCompletion, AiError, AiProvider, AiProviderHealth
 
 NAME = "ollama"
@@ -67,17 +66,7 @@ class OllamaProvider(AiProvider):
         image: bytes | None = None,
         image_media_type: str = "image/png",
     ) -> AiCompletion:
-        if image is None:
-            user_content: object = user
-        else:
-            b64 = base64.b64encode(image).decode("ascii")
-            user_content = [
-                {"type": "text", "text": user},
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:{image_media_type};base64,{b64}"},
-                },
-            ]
+        user_content = build_user_content(user, image, image_media_type)
         try:
             resp = self._client.chat.completions.create(
                 model=self._model,

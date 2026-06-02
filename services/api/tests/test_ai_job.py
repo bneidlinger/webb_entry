@@ -69,7 +69,7 @@ def _enable(monkeypatch, **kw) -> Settings:
 
 
 def _install(monkeypatch, provider: _FakeProvider) -> _FakeProvider:
-    monkeypatch.setattr(ai_job, "get_ai_provider", lambda settings, vision=False: provider)
+    monkeypatch.setattr(ai_job, "get_ai_provider", lambda settings, **kwargs: provider)
     return provider
 
 

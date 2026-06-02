@@ -90,3 +90,65 @@ def parse_ai_report(raw: str) -> AiReportPayload:
         raise AiError(
             f"model output failed schema validation: {e}", is_permanent=True
         ) from e
+
+
+def ai_report_json_schema() -> dict:
+    """JSON Schema mirroring `AiReportPayload`, for OpenAI strict structured output.
+
+    OpenAI's `response_format={"type": "json_schema", strict: true}` requires every
+    property listed in `required` and `additionalProperties: false` on every object.
+    This is a *nudge* to the cloud model; `parse_ai_report` remains the authoritative
+    validation gate, so minor drift from `AiReportPayload` is harmless.
+    """
+    fact = {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "name": {"type": "string"},
+            "value": {"type": "string"},
+            "source": {"type": "string", "enum": ["metadata", "header", "computed"]},
+        },
+        "required": ["name", "value", "source"],
+    }
+    feature = {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "feature": {"type": "string"},
+            "evidence": {"type": "string"},
+            "confidence": {"type": "string", "enum": ["low", "medium", "high"]},
+        },
+        "required": ["feature", "evidence", "confidence"],
+    }
+    flag = {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "flag": {"type": "string"},
+            "severity": {"type": "string", "enum": ["info", "warning", "critical"]},
+            "details": {"type": "string"},
+        },
+        "required": ["flag", "severity", "details"],
+    }
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "summary": {"type": "string"},
+            "measured_facts": {"type": "array", "items": fact},
+            "interesting_features": {"type": "array", "items": feature},
+            "quality_flags": {"type": "array", "items": flag},
+            "recommended_next_steps": {"type": "array", "items": {"type": "string"}},
+            "human_validation_required": {"type": "boolean"},
+            "tags": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": [
+            "summary",
+            "measured_facts",
+            "interesting_features",
+            "quality_flags",
+            "recommended_next_steps",
+            "human_validation_required",
+            "tags",
+        ],
+    }

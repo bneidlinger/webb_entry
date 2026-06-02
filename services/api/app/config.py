@@ -89,6 +89,14 @@ class Settings(BaseSettings):
     local_ai_temperature: float = Field(default=0.2)
     local_ai_request_timeout_seconds: int = Field(default=120)
 
+    # ---- Phase 6: cloud AI (OpenAI / Azure OpenAI) ----
+    # Cloud is opt-in + on-demand (it costs money). CLOUD_AI_ENABLE gates the cloud
+    # / cloud_review enqueue + regenerate, mirroring LOCAL_AI_ENABLE. The provider +
+    # credentials are the AI_PROVIDER / OPENAI_* / AZURE_OPENAI_* fields above.
+    cloud_ai_enable: bool = Field(default=False)
+    cloud_ai_max_tokens: int = Field(default=1536)
+    cloud_ai_request_timeout_seconds: int = Field(default=120)
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_allowed_origins.split(",") if o.strip()]

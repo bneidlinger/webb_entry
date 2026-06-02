@@ -10,9 +10,9 @@ analyzers. Prompt building and output validation live outside the provider (in
 `app.services.ai.prompts` and `app.services.ai.schemas`) so they're shared across
 providers — the provider only does transport.
 
-NB: the Phase 0 `app.clients.ai` stub (`CloudAIProvider`, async) predates this
-protocol and currently has no live callers. Phase 6 will reshape those adapters
-onto this `AiProvider` rather than maintain two parallel hierarchies.
+NB: Phase 6 reshaped the former async `app.clients.ai` stub onto this protocol as
+`app.services.ai.cloud.CloudAiProvider` (OpenAI + Azure OpenAI) and removed the
+stub, so there is a single provider hierarchy.
 
 Failure semantics mirror `app.services.previews.PreviewError` /
 `app.services.analysis.base.AnalysisError`:
@@ -43,10 +43,14 @@ class AiProviderHealth:
 @dataclass
 class AiCompletion:
     """A single completion. `text` is expected to be a JSON document (providers
-    request JSON-object output); parsing + validation happen in the caller."""
+    request structured JSON output); parsing + validation happen in the caller.
+    `cost_estimate` (USD) and `usage` are populated by cloud providers — local
+    inference is free, so Ollama leaves both None."""
 
     text: str
     model: str
+    cost_estimate: float | None = None
+    usage: dict | None = None
 
 
 class AiProvider(Protocol):

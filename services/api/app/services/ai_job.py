@@ -120,7 +120,7 @@ def _run(
     # ---- call the model + validate output ------------------------------
     try:
         image = _read_preview_bytes(settings, product) if vision else None
-        provider = get_ai_provider(settings, vision=vision)
+        provider = get_ai_provider(settings, mode=mode)
         completion = provider.complete(
             system=system_prompt,
             user=prompt.build_user_prompt(payload),
