@@ -102,7 +102,7 @@ These are decisions already made; follow them unless there's a real reason to ch
 - **Commits**: one commit per phase or per cohesive change. Conventional-ish ("Phase N: ..." or "<area>: ..."). Co-author trailer for AI assistance. No `--no-verify`, no `--amend` on pushed commits.
 - **Secrets**: never put real secrets in `.env.example`. GitHub push protection is on; even false-positive matches (like the Azurite well-known dev key) get blocked. Use `UseDevelopmentStorage=true` for Azurite.
 
-## State (2026-05-30)
+## State (2026-06-02)
 
 **Phase 0 — scaffold** ✓ shipped (`commit 22223f3`)
 - Monorepo, Next.js 15 + Tailwind, FastAPI with `/health`, RQ worker skeleton, Azurite/Postgres/Redis in compose, GitHub Actions CI, `CloudAIProvider` interface with OpenAI + Azure OpenAI adapters.
@@ -162,7 +162,15 @@ These are decisions already made; follow them unless there's a real reason to ch
 - `ai_job._run(vision=)` adds `vision_disabled` + `no_preview` skips; helpers gained a `mode` param so text + vision rows are keyed independently. Frontend: a second regenerate button + a "vision" chip on `local_vision` cards.
 - Tests (18 new, 191 total, all pass without Ollama via a fake provider + injected storage). Web typecheck + build clean. Cloud AI (incl. cloud vision) is Phase 6.
 
-**Phases 6–8** see [plan §11](webbwatch_ai_project_plan.md).
+**Phase 6 — cloud AI review (OpenAI + Azure OpenAI)** ✓ shipped
+- New `app/services/ai/cloud.py` `CloudAiProvider` implements the same sync `AiProvider` protocol as Ollama (OpenAI **or** Azure OpenAI, selected by `AI_PROVIDER`), reshaped from the zero-caller Phase 0 `app/clients/ai/` stub (deleted). `get_ai_provider(settings, *, mode=)` is now provider-aware; `cloud_config_error()` is a no-network pre-flight. chat.completions with a strict JSON-schema `response_format` (json_object fallback for old Azure api-versions); `parse_ai_report` stays the validation gate.
+- `ai_job._run` is now pass-spec driven (`_PassSpec`): `local` / `local_vision` / `cloud` / `cloud_review` share one flow keyed on a `mode` string (the old `vision` bool is gone end-to-end, incl. `enqueue_ai_report` + the route's `?mode=`, with `?vision=true` kept as an alias). New skips: `cloud_ai_disabled`, `cloud_not_configured`, `no_local_report`.
+- **Reviewer mode** (`mode="cloud_review"`): the cloud model critiques the latest local report against the measurements (`prompts/reviewer_v1.py`, kind-agnostic), reusing the `AiReportPayload` shape so the report card needs no new component. The local report is injected into the payload (and persisted as `input_summary_json.local_report`).
+- **Cost**: `ai_reports.cost_estimate` (migration `719f12cac17a`) records actual USD from the provider's token usage (null for local/failures); `app/services/ai/pricing.py` + `ai_job.estimate_cost_for_product` back a pre-run estimate. API: `AiReportRead.cost_estimate` + `GET /api/products/{id}/ai-reports/cost-estimate`. Frontend: Local-vs-Cloud side-by-side columns, generalized mode chips, per-card cost, cloud/review buttons showing a pre-run estimate.
+- On-demand + cost-gated (`CLOUD_AI_ENABLE`, default off); cloud is **never** auto-chained from ingest/analysis (only local text auto-runs). Lightweight `app/services/ai_modes.py` holds the mode→enable-flag map so `queue.py` (ingest hot path) stays matplotlib-free. **Cloud vision deferred** (the `mode`/image plumbing carries through).
+- Tests (53 new, 244 total, all green without keys/Ollama via mocked clients / a fake provider). Web typecheck + build clean.
+
+**Phases 7–8** see [plan §11](webbwatch_ai_project_plan.md).
 
 ## Phase 2 directions — new-data detection + alerts (shipped, retained for reference)
 

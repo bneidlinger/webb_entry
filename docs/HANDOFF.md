@@ -2,7 +2,7 @@
 
 **Audience.** A Claude (or human engineer) opening this repo cold who needs to be production-effective inside one session. This document complements — does not replace — [`CLAUDE.md`](../CLAUDE.md) (per-session orientation) and [`webbwatch_ai_project_plan.md`](../webbwatch_ai_project_plan.md) (design source of truth). Read this once at the start of any meaningful work; it codifies *why*, *what we know*, and *what we deliberately don't*. Skim in 3 min; deep-read in 10. Length is the price of not repeating mistakes.
 
-**Last updated.** End of Phase 5.5 (2026-05-30).
+**Last updated.** End of Phase 6 (2026-06-02).
 
 ---
 
@@ -37,10 +37,11 @@ Each of these is a deliberate, load-bearing decision. Changing one cascades. Bri
 | **Reproducibility metadata lives inside `measurements_json`** | scipy/numpy/astropy versions + crds_context + calibration_version under `measurements_json["meta"]`. Keeps schema stable while letting future re-runs diff against past ones. | `services/api/app/services/analysis_job.py::_build_meta`. |
 | **Version bumps preserve history; same-version re-runs overwrite** | Unique constraint on `(data_product_id, analyzer_name, analyzer_version)`. Re-running v1 is a no-op; bumping the analyzer to v2 creates a new row alongside v1 for diffing. API returns only the latest per analyzer name. | `services/api/app/models/data_product_analysis.py`; `services/api/app/routes/analyses.py`. |
 | **AI is the second pass; it never touches FITS** | The local model narrates over `DataProductAnalysis.measurements_json` + metadata only (plan §6/§13 credibility surface). `analysis_job` chains `enqueue_ai_report` on success so measurements always exist first; `ai_job` *also* independently requires a successful analysis row. | `services/api/app/services/ai_job.py`; `services/api/app/services/analysis_job.py` (success path). |
-| **`AiProvider` is one sync protocol for local + cloud** | Providers run inside the sync RQ worker. Phase 0's async `clients/ai` cloud stub has no live callers; Phase 6 reshapes it onto `services/ai/base.AiProvider` rather than keeping two hierarchies. | `services/api/app/services/ai/base.py`. |
+| **`AiProvider` is one sync protocol for local + cloud** | Providers run inside the sync RQ worker. The Phase 0 async `clients/ai` stub was reshaped onto this protocol as `services/ai/cloud.CloudAiProvider` and **deleted** — one hierarchy. | `services/api/app/services/ai/base.py`, `cloud.py`. |
 | **`LOCAL_AI_ENABLE` gates the AI enqueue (default off)** | Same opt-in as `JWST_SNS_ENABLE`. Off → `enqueue_ai_report` no-ops, so dev sessions without Ollama never accumulate failure rows. | `services/api/app/services/queue.py::enqueue_ai_report`; `app/config.py`. |
 | **AI reports overwrite-in-place per `(product, mode, model_name, prompt_version)`** | Mirrors the analysis table. Regenerate re-runs and replaces; a `PROMPT_VERSION` bump forks a new row. API returns the latest per `(mode, model_name)`. | `services/api/app/models/ai_report.py`; `services/api/app/services/ai_job.py`. |
-| **Vision is on-demand and a separate report (`mode="local_vision"`)** | The vision model loads only on an explicit regenerate (plan §6 one-model-at-a-time), so no preview/analysis job coupling. It reuses the `ai_reports` table + `mode` column (no migration), so the text + vision reports coexist. `PreviewStorage.read` feeds the preview PNG to the provider. | `services/api/app/services/ai_job.py` (`vision=`); `app/routes/ai_reports.py` (`?vision`); `app/services/storage.py`. |
+| **Vision is on-demand and a separate report (`mode="local_vision"`)** | The vision model loads only on an explicit regenerate (plan §6 one-model-at-a-time), so no preview/analysis job coupling. It reuses the `ai_reports` table + `mode` column (no migration), so the text + vision reports coexist. `PreviewStorage.read` feeds the preview PNG to the provider. | `services/api/app/services/ai_job.py`; `app/routes/ai_reports.py` (`?mode=`, `?vision` alias); `app/services/storage.py`. |
+| **Cloud AI is on-demand + cost-gated, never auto-chained** (Phase 6) | Cloud costs money (plan §14). `CLOUD_AI_ENABLE` gates it (default off); only the local text pass auto-runs after analysis. All four passes (`local`/`local_vision`/`cloud`/`cloud_review`) share one `ai_job._run` via `_PassSpec`, keyed on a `mode` string. | `services/api/app/services/ai_job.py` (`_resolve_pass_spec`); `app/services/ai_modes.py`; `queue.py::enqueue_ai_report`. |
 
 ---
 
@@ -78,19 +79,23 @@ services/api/app/
       __init__.py                  # get_analyzer_for(product_type) dispatch.
     analysis_types.py              # Light: is_analyzable(). No scipy import.
     analysis_job.py                # Orchestration: fetch → analyze → persist.
-    ai/                            # Phase 5: local AI provider + prompts + report schema.
-      base.py                      # AiProvider protocol (SYNC), AiError, AiCompletion.
+    ai/                            # Phase 5/6: local + cloud AI providers + prompts + report schema.
+      base.py                      # AiProvider protocol (SYNC); AiError; AiCompletion (+cost_estimate/usage).
       local.py                     # OllamaProvider (openai SDK; image= → vision).
-      schemas.py                   # AiReportPayload (plan §7) + tolerant parse_ai_report.
-      prompts/                     # image/spectrum _v1: SYSTEM_PROMPT + VISION_SYSTEM_PROMPT.
-      __init__.py                  # get_ai_provider(settings, vision=) factory.
-    ai_job.py                      # Phase 5/5.5: narrate measurements (+preview for vision) → AiReport.
+      cloud.py                     # Phase 6: CloudAiProvider (OpenAI + Azure; JSON-schema output + cost).
+      _messages.py                 # shared user-turn builder (text + base64 image) for both providers.
+      pricing.py                   # Phase 6: cloud price table + cost_from_usage + pre-run estimate.
+      schemas.py                   # AiReportPayload (§7) + parse_ai_report + ai_report_json_schema.
+      prompts/                     # image/spectrum _v1 (SYSTEM + VISION); reviewer_v1 (Phase 6, kind-agnostic).
+      __init__.py                  # get_ai_provider(settings, mode=) (provider-aware) + cloud_config_error.
+    ai_modes.py                    # Phase 6: mode list + enable-gate map (import-cheap; queue hot path).
+    ai_job.py                      # Phase 5/6: _PassSpec drives local/vision/cloud/cloud_review → AiReport.
     storage.py                     # Local fs / Azure Blob backends. upload() + read() (read added for vision).
-    queue.py                       # Soft-import rq + enqueue (preview + analysis + ai, incl. vision).
+    queue.py                       # Soft-import rq + enqueue (preview + analysis + ai by mode).
   routes/                          # FastAPI routers, one per resource.
     previews.py                    # Serves local-fs PNGs at /api/previews/{path}.
     analyses.py                    # GET /api/products/{id}/analysis.
-    ai_reports.py                  # GET /api/products/{id}/ai-reports + POST .../regenerate(?vision).
+    ai_reports.py                  # GET ai-reports + POST .../regenerate(?mode=) + GET .../cost-estimate.
   schemas/                         # Pydantic response models.
   cli/                             # Typer subcommands. Entry: python -m app
 
@@ -272,11 +277,11 @@ Schema docs that don't fit in model file docstrings.
 
 ### `ai_reports` (Phase 5)
 - One row per `(data_product_id, mode, model_name, prompt_version)`. Unique constraint enforces it; overwrite-in-place like `data_product_analyses`.
-- `mode` is `"local"` in Phase 5 (`"cloud"`/`"hybrid"` join in Phase 6). `model_name` is the Ollama model tag; `prompt_version` is the prompt module's `PROMPT_VERSION`.
+- `mode` is `"local"`/`"local_vision"` (Phase 5/5.5) or `"cloud"`/`"cloud_review"` (Phase 6). `model_name` is the Ollama model tag (local) or the OpenAI model id / Azure deployment (cloud); `prompt_version` is the prompt module's `PROMPT_VERSION`.
 - `report_json` is null until success; non-null = usable. It holds the validated plan-§7 report (`summary`, `measured_facts`, `interesting_features`, `quality_flags`, `recommended_next_steps`, `human_validation_required`, `tags`) **plus** a `model_notes` block (`model`, `prompt_version`, `mode`, `created_at`) stamped by the job — the model never authors `model_notes`.
 - `input_summary_json` snapshots the exact payload sent to the model (product + observation + measurements) for reproducibility/debugging — it equals what `build_user_prompt` rendered.
 - Failure model is identical to previews/analyses: `attempts` JSON, `last_error`, `is_permanent_failure`. Permanent: unparseable/invalid JSON output, missing model. Transient: Ollama unreachable, unreadable preview. The GET endpoint returns the latest row per `(mode, model_name)`; failed rows surface so the UI can show them.
-- `mode` is `"local"` (Phase 5 text) or `"local_vision"` (Phase 5.5 vision — see §7c.8); both can coexist for one product, and `report_json["model_notes"]["mode"]` records which produced a given report. Vision rows carry the vision model tag in `model_name`.
+- `mode` ∈ `"local"`/`"local_vision"` (Phase 5/5.5) and `"cloud"`/`"cloud_review"` (Phase 6 — cloud text + reviewer); any number of `(mode, model_name)` rows coexist, and `report_json["model_notes"]["mode"]` records which produced a given report. `cost_estimate` (USD, nullable) is set for cloud rows from the provider's token usage (null for local — free — and for failed rows); reviewer rows persist the critiqued report under `input_summary_json["local_report"]`.
 
 ---
 
@@ -299,6 +304,7 @@ Through Phase 3 we explicitly do *not* do these. If you find yourself wanting on
 - **next/image optimization.** Frontend uses `<img>` with eslint-disable. Switching to `next/image` requires adding the API host to `next.config.js`'s `images.domains` (which differs between dev/prod) — defer until image volumes warrant it.
 - **Photometry / calibrated SNR.** Phase 4 source count is coarse (connected components); SNR is a `|median|/MAD` proxy. photutils is the right tool for photometry — already declared as an *optional* extra in the worker pyproject. Wire it when Phase 5+ wants flux-per-source or SNR-per-resel.
 - **Analysis history endpoint.** API returns only the latest row per analyzer name. The DB keeps every version. Add `/api/products/{id}/analysis/history` when version diffing becomes a real workflow.
+- **Cloud vision** (`mode="cloud_vision"`). Phase 6 shipped cloud text + reviewer; cloud vision is a one-flag extension — the `mode`/image plumbing already carries through (`get_ai_provider(mode=...)` reads the `vision` suffix; `CloudAiProvider.complete(image=)` works) — but it's unwired (no prompt/button) because it costs $$ per call and local vision already exists. Note: `mode="cloud_review_vision"` (19 chars) would exceed the `ai_reports.mode` `String(16)` — bump the column if a combined mode is ever needed.
 
 ---
 
@@ -509,9 +515,29 @@ On-demand local vision (4 commits `360a73b..` on `main`). A multimodal model als
 
 ---
 
-## 7d. Phase 6 directions — cloud AI review (next)
+## 7d. Phase 6 — cloud AI review (shipped 2026-06-02)
 
-Plan reference: [plan §11 Phase 6](../webbwatch_ai_project_plan.md) (scope), [plan §6](../webbwatch_ai_project_plan.md) (cloud AI role + OpenAI vs Azure OpenAI provider interface), [plan §7](../webbwatch_ai_project_plan.md) (report schema). **This is the contract for the next session — but the decisions below are *recommendations, not locked*.** There has been no Phase 6 decision conversation yet (unlike Phase 5's §7c.1); confirm §7d.4 with the user before coding.
+Plan reference: [plan §11 Phase 6](../webbwatch_ai_project_plan.md) (scope), [plan §6](../webbwatch_ai_project_plan.md) (cloud AI role + OpenAI vs Azure OpenAI), [plan §7](../webbwatch_ai_project_plan.md) (report schema).
+
+**Shipped 2026-06-02** (5 commits `9fe397a..cb1dabc` on the `phase-6-cloud-ai` branch). The §7d.0–7d.7 subsections below are the original design intent (2026-05-30), retained for rationale; this block records what actually landed.
+
+### What landed
+
+1. **`CloudAiProvider`** (`app/services/ai/cloud.py`) — one sync class serving OpenAI **and** Azure OpenAI behind the existing `AiProvider` protocol, reshaped from the zero-caller Phase 0 `app/clients/ai/` stub (**deleted** — one provider hierarchy now). `chat.completions` with a strict JSON-schema `response_format` (`schemas.ai_report_json_schema`), `json_object` fallback for Azure api-versions < `2024-08-01`; `parse_ai_report` stays the validation gate. Error taxonomy: auth / permission / bad-request / not-found → **permanent**; rate-limit / timeout / connection / generic 5xx → **transient**. The `client=` constructor arg is the test seam, mirroring Ollama.
+2. **Mode-aware factory** — `get_ai_provider(settings, *, mode=)` picks Ollama vs cloud (per `AI_PROVIDER`); `cloud_config_error(settings)` is a no-network pre-flight reused by the job guard + the cost route. Azure managed identity uses **sync** `azure.identity` (salvaged from the stub; **not** `.aio`).
+3. **Pass-spec `ai_job`** — the `vision` bool became a `mode` string end-to-end (job entry, `enqueue_ai_report`, RQ args, route `?mode=`; `?vision=true` kept as an alias). `_PassSpec` + `_resolve_pass_spec` unify `local` / `local_vision` / `cloud` / `cloud_review`. New skips: `cloud_ai_disabled`, `cloud_not_configured`, `no_local_report`. Lightweight `app/services/ai_modes.py` holds the enable-gate map so `queue.py` (ingest hot path) stays matplotlib-free.
+4. **Reviewer mode** (`mode="cloud_review"`) — `prompts/reviewer_v1.py` (kind-agnostic) critiques the latest successful local report against the measurements, reusing `AiReportPayload` (critique → `quality_flags`, per-claim verdicts → `interesting_features`, checks → `recommended_next_steps`), so the report card needs no new component. The local report is injected into the payload + persisted as `input_summary_json["local_report"]`.
+5. **Cost** — `ai_reports.cost_estimate` (migration `719f12cac17a`, nullable Float) records actual USD from the provider's token `usage` (null for local/failures). `pricing.py` (price table + `cost_from_usage` + `estimate_cost`) + `ai_job.estimate_cost_for_product` back a pre-run estimate. API: `AiReportRead.cost_estimate` + `GET .../ai-reports/cost-estimate?mode=`. Frontend: Local-vs-Cloud side-by-side columns, generalized mode chips, per-card cost, cloud/review buttons showing the pre-run estimate.
+6. **Config** — `CLOUD_AI_ENABLE` (default off), `CLOUD_AI_MAX_TOKENS` (1536), `CLOUD_AI_REQUEST_TIMEOUT_SECONDS` (120). Provider keys (`AI_PROVIDER` / `OPENAI_*` / `AZURE_OPENAI_*`) already existed in config + `.env.example`.
+7. **Tests** — 53 new (244 API total, all green without keys/Ollama via mocked clients / a fake provider). Web typecheck + build clean.
+
+### How the open questions (§7d.4) resolved
+
+- **Sync vs async (Q1):** sync — cloud runs in the worker like Ollama; the async stub was deleted.
+- **Which providers (Q2):** **both** OpenAI + Azure behind `AI_PROVIDER` (default `openai`); one class, two client-construction branches in the factory.
+- **Cost surface (Q3):** a dedicated nullable `cost_estimate` column (queryable, survives failure rows), **not** `model_notes`. No per-user quotas (deferred to Phase 8 auth — `user_id` is still hardcoded `"default"`).
+- **Reviewer scope (Q4):** **full critique** (claim-by-claim), reusing `AiReportPayload`.
+- **Cloud vision (Q5):** **deferred** — the `mode`/image plumbing carries through (`get_ai_provider(mode=...)` reads the `vision` suffix, `CloudAiProvider.complete(image=)` works), but no prompt/button this phase.
 
 ### 7d.0 What Phase 6 is
 
@@ -636,6 +662,10 @@ Things that already cost us debugging time. Read this before re-falling into the
 18. **Ollama cold-start can exceed RQ's default timeout.** The first request after the server starts loads weights into VRAM (30s+). The AI job runs with a 300s `job_timeout` (`queue.AI_JOB_TIMEOUT`); the provider request timeout is `LOCAL_AI_REQUEST_TIMEOUT_SECONDS` (default 120). On Windows, Ollama's base URL is `http://localhost:11434` but the OpenAI-compatible path **adds `/v1`** → `http://localhost:11434/v1`.
 
 19. **Vision (Phase 5.5) uses a second, heavier model — keep it on-demand.** `mode="local_vision"` loads `LOCAL_AI_VISION_MODEL`, which on 8 GB VRAM swaps with the text model. It runs only on an explicit regenerate (`?vision=true`) and needs a full preview to exist first (`no_preview` skip otherwise). Adding vision needed **no migration** — `mode` is just a new value in the existing column, and the text + vision reports coexist (GET returns latest per `(mode, model_name)`).
+
+20. **`queue.py` must stay matplotlib-free — it's on the ingest hot path** (§9.13). Phase 6's mode→enable-flag map lives in `app/services/ai_modes.py` (no heavy imports) precisely so `queue.enqueue_ai_report` imports `mode_enabled` from there, not from `ai_job` (which transitively pulls `previews` → matplotlib). Routes + `ai_job` may import freely; `queue.py` may not. The `vision` bool → `mode` string migration touched the job, the queue, the route (`?mode=`, with `?vision=true` kept as an alias), and their tests — change all in lockstep if you touch the RQ args.
+
+21. **Cloud cost pricing keys on the model id, not the Azure deployment name.** `pricing.price_for` falls back to a conservative `_DEFAULT` for an unknown model/deployment, so a custom Azure deployment yields a rough per-token price — but `cost_estimate` is still computed from the provider's **real** token `usage`, so it's only the price that's approximate. Bump `_PRICES` in `app/services/ai/pricing.py` when prices drift. The pre-run estimate additionally uses a chars/4 token heuristic (it can't know exact tokenization before the call).
 
 ---
 
