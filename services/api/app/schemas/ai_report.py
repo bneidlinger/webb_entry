@@ -29,6 +29,7 @@ class AiReportRead(BaseModel):
     generated_at: datetime | None
     last_error: str | None
     is_permanent_failure: bool
+    cost_estimate: float | None = None
 
 
 class RegenerateResponse(BaseModel):
@@ -36,4 +37,19 @@ class RegenerateResponse(BaseModel):
 
     status: str  # "enqueued" | "skipped"
     enqueued: bool
+    reason: str | None = None
+
+
+class CostEstimateResponse(BaseModel):
+    """Pre-run cost estimate for a cloud report mode.
+
+    `available=False` + `reason` when there's nothing to price yet (no analysis, no
+    local report to review, or cloud not configured); otherwise `estimate_usd`.
+    """
+
+    available: bool
+    mode: str | None = None
+    model: str | None = None
+    currency: str | None = None
+    estimate_usd: float | None = None
     reason: str | None = None

@@ -26,9 +26,16 @@ _VALID_JSON = json.dumps(
 class _FakeProvider:
     name = "fake"
 
-    def __init__(self, *, text: str | None = None, error: Exception | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        text: str | None = None,
+        error: Exception | None = None,
+        cost: float | None = None,
+    ) -> None:
         self._text = text
         self._error = error
+        self._cost = cost
         self.calls: list[dict] = []
 
     def health(self) -> AiProviderHealth:
@@ -48,7 +55,7 @@ class _FakeProvider:
         )
         if self._error is not None:
             raise self._error
-        return AiCompletion(text=self._text or "", model="test-model")
+        return AiCompletion(text=self._text or "", model="test-model", cost_estimate=self._cost)
 
 
 def _settings(
@@ -574,3 +581,53 @@ def test_cloud_review_injects_local_report(session, monkeypatch):
     assert row.report_json["model_notes"]["mode"] == "cloud_review"
     # local + cloud_review coexist as separate rows.
     assert {r.mode for r in prod.ai_reports} == {"local", "cloud_review"}
+
+
+# ---- cost (Phase 6) -------------------------------------------------------
+
+
+def test_cloud_cost_persisted(session, monkeypatch):
+    _enable(monkeypatch, cloud_enable=True)
+    _install(monkeypatch, _FakeProvider(text=_VALID_JSON, cost=0.0123))
+    prod = _seed_product(session)
+    _add_analysis(session, prod)
+
+    result = ai_job._run(session, prod.id, mode="cloud")
+    session.commit()
+    session.refresh(prod)
+
+    assert result["cost_estimate"] == 0.0123
+    assert next(r for r in prod.ai_reports if r.mode == "cloud").cost_estimate == 0.0123
+
+
+def test_local_cost_is_none(session, monkeypatch):
+    _enable(monkeypatch)
+    _install(monkeypatch, _FakeProvider(text=_VALID_JSON))  # local provider reports no cost
+    prod = _seed_product(session)
+    _add_analysis(session, prod)
+    ai_job._run(session, prod.id, mode="local")
+    session.commit()
+    session.refresh(prod)
+    assert prod.ai_reports[0].cost_estimate is None
+
+
+def test_estimate_cost_for_product_cloud(session, monkeypatch):
+    _enable(monkeypatch, cloud_enable=True)
+    prod = _seed_product(session)
+    _add_analysis(session, prod)
+
+    out = ai_job.estimate_cost_for_product(session, prod.id, "cloud")
+    assert out["available"] is True
+    assert out["model"] == "cloud-model"
+    assert out["currency"] == "USD"
+    assert out["estimate_usd"] > 0
+
+
+def test_estimate_cost_for_review_needs_local_report(session, monkeypatch):
+    _enable(monkeypatch, cloud_enable=True)
+    prod = _seed_product(session)
+    _add_analysis(session, prod)
+
+    out = ai_job.estimate_cost_for_product(session, prod.id, "cloud_review")
+    assert out["available"] is False
+    assert out["reason"] == "no_local_report"

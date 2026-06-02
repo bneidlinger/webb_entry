@@ -44,6 +44,7 @@ from app.config import Settings, get_settings
 from app.db import session_scope
 from app.models import AiReport, DataProduct, DataProductAnalysis, Observation
 from app.services.ai import AiError, cloud_config_error, get_ai_provider, parse_ai_report
+from app.services.ai.pricing import estimate_cost
 from app.services.ai.prompts import get_prompt_for, reviewer_v1
 from app.services.ai_modes import (
     MODE_CLOUD,
@@ -197,7 +198,14 @@ def _run(
         "created_at": datetime.now(UTC).isoformat(),
     }
     _upsert_success(
-        session, product, spec.mode, spec.model_name, spec.prompt_version, report_dict, payload
+        session,
+        product,
+        spec.mode,
+        spec.model_name,
+        spec.prompt_version,
+        report_dict,
+        payload,
+        cost_estimate=completion.cost_estimate,
     )
 
     return {
@@ -206,6 +214,7 @@ def _run(
         "mode": spec.mode,
         "model_name": spec.model_name,
         "prompt_version": spec.prompt_version,
+        "cost_estimate": completion.cost_estimate,
     }
 
 
@@ -266,6 +275,54 @@ def _cloud_model_name(settings: Settings) -> str:
 
 def _max_tokens_for(spec: _PassSpec, settings: Settings) -> int:
     return settings.cloud_ai_max_tokens if spec.is_cloud else settings.local_ai_max_tokens
+
+
+def estimate_cost_for_product(session: Session, product_id: int, mode: str) -> dict:
+    """Pre-run USD estimate for generating a `mode` report on `product_id`.
+
+    Reuses the exact payload + prompt the job would send so the estimate tracks
+    reality. Returns ``{"available": False, "reason": ...}`` when there's nothing to
+    price yet (no analysis, or no local report to review).
+    """
+    settings = get_settings()
+    product = session.get(DataProduct, product_id)
+    if product is None:
+        return {"available": False, "reason": "not_found"}
+
+    analysis = _latest_successful_analysis(session, product_id)
+    if analysis is None:
+        return {"available": False, "reason": "no_analysis"}
+
+    measurements = analysis.measurements_json or {}
+    kind_prompt = get_prompt_for(measurements.get("kind"))
+    if kind_prompt is None:
+        return {"available": False, "reason": "unsupported_kind"}
+
+    prompt = reviewer_v1 if mode == MODE_CLOUD_REVIEW else kind_prompt
+    spec = _resolve_pass_spec(mode, prompt, settings)
+
+    local_report = None
+    if spec.needs_local_report:
+        local = _latest_successful_local_report(session, product_id)
+        if local is None:
+            return {"available": False, "reason": "no_local_report"}
+        local_report = local.report_json
+
+    observation = session.get(Observation, product.observation_id)
+    payload = _build_payload(product, observation, measurements, local_report=local_report)
+    estimate = estimate_cost(
+        system=spec.system_prompt,
+        user=prompt.build_user_prompt(payload),
+        max_tokens=_max_tokens_for(spec, settings),
+        model=spec.model_name,
+    )
+    return {
+        "available": True,
+        "mode": spec.mode,
+        "model": spec.model_name,
+        "currency": "USD",
+        "estimate_usd": estimate,
+    }
 
 
 def _latest_successful_analysis(
@@ -397,6 +454,7 @@ def _upsert_success(
     prompt_version: str,
     report: dict,
     input_summary: dict,
+    cost_estimate: float | None = None,
 ) -> None:
     row = _find_or_create_row(session, product, mode, model_name, prompt_version)
     row.report_json = report
@@ -404,6 +462,7 @@ def _upsert_success(
     row.generated_at = datetime.now(UTC)
     row.last_error = None
     row.is_permanent_failure = False
+    row.cost_estimate = cost_estimate
 
 
 def _record_failure(

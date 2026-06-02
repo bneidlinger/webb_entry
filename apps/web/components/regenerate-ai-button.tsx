@@ -13,34 +13,49 @@ interface RegenerateResult {
   reason?: string | null;
 }
 
+// Per-mode button labels. Any mode the API accepts has an entry here.
+const LABELS: Record<string, { idle: string; busy: string }> = {
+  local: { idle: "Regenerate AI summary", busy: "Regenerating…" },
+  local_vision: { idle: "Generate vision summary", busy: "Generating…" },
+  cloud: { idle: "Run cloud summary", busy: "Running…" },
+  cloud_review: { idle: "Run cloud review", busy: "Reviewing…" },
+};
+
 function reasonMessage(reason: string | null | undefined): string {
   if (reason === "local_ai_disabled") return "Local AI is disabled (set LOCAL_AI_ENABLE).";
   if (reason === "vision_disabled") return "Vision is disabled (set LOCAL_AI_VISION_ENABLE).";
-  if (reason === "queue_unavailable") return "Worker queue unavailable (is Redis + the worker up?).";
+  if (reason === "cloud_ai_disabled") return "Cloud AI is disabled (set CLOUD_AI_ENABLE).";
+  if (reason === "cloud_not_configured")
+    return "Cloud AI isn't configured (set a provider API key).";
+  if (reason === "queue_unavailable")
+    return "Worker queue unavailable (is Redis + the worker up?).";
   return "Could not queue a regeneration.";
+}
+
+function formatUsd(v: number): string {
+  return v < 0.01 ? `~$${v.toFixed(4)}` : `~$${v.toFixed(2)}`;
 }
 
 export function RegenerateAiButton({
   productId,
-  vision = false,
+  mode = "local",
+  estimateUsd = null,
 }: {
   productId: number;
-  vision?: boolean;
+  mode?: string;
+  estimateUsd?: number | null;
 }) {
   const router = useRouter();
   const [state, setState] = useState<ButtonState>("idle");
   const [message, setMessage] = useState("");
 
-  const idleLabel = vision ? "Generate vision summary" : "Regenerate AI summary";
-  const busyLabel = vision ? "Generating…" : "Regenerating…";
+  const labels = LABELS[mode] ?? LABELS.local;
 
   async function onClick() {
     setState("loading");
     setMessage("");
     try {
-      const url = `${API_BASE}/api/products/${productId}/ai-reports/regenerate${
-        vision ? "?vision=true" : ""
-      }`;
+      const url = `${API_BASE}/api/products/${productId}/ai-reports/regenerate?mode=${mode}`;
       const res = await fetch(url, { method: "POST" });
       const body = (await res.json()) as RegenerateResult;
       if (body.enqueued) {
@@ -65,8 +80,11 @@ export function RegenerateAiButton({
         disabled={state === "loading"}
         className="rounded border border-webb-star/20 bg-webb-deep/60 px-3 py-1.5 text-xs text-webb-star/80 hover:border-webb-accent/40 hover:text-webb-star disabled:opacity-50"
       >
-        {state === "loading" ? busyLabel : idleLabel}
+        {state === "loading" ? labels.busy : labels.idle}
       </button>
+      {estimateUsd != null && state === "idle" && (
+        <span className="text-xs text-webb-star/40">est. {formatUsd(estimateUsd)}</span>
+      )}
       {message && (
         <span
           className={`text-xs ${state === "error" ? "text-amber-300/80" : "text-webb-star/50"}`}

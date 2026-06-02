@@ -239,6 +239,7 @@ export interface AiReportRead {
   generated_at: string | null;
   last_error: string | null;
   is_permanent_failure: boolean;
+  cost_estimate: number | null;
 }
 
 export async function getProductAiReports(id: number): Promise<Result<AiReportRead[]>> {
@@ -248,6 +249,33 @@ export async function getProductAiReports(id: number): Promise<Result<AiReportRe
     });
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
     const data = (await res.json()) as AiReportRead[];
+    return { ok: true, data };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+// Phase 6: pre-run cost estimate for a cloud report mode ("cloud" | "cloud_review").
+export interface CostEstimateResponse {
+  available: boolean;
+  mode?: string | null;
+  model?: string | null;
+  currency?: string | null;
+  estimate_usd?: number | null;
+  reason?: string | null;
+}
+
+export async function getAiCostEstimate(
+  id: number,
+  mode: string,
+): Promise<Result<CostEstimateResponse>> {
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/products/${id}/ai-reports/cost-estimate?mode=${mode}`,
+      { next: { revalidate: 30 } },
+    );
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const data = (await res.json()) as CostEstimateResponse;
     return { ok: true, data };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };

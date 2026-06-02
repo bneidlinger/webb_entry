@@ -248,3 +248,62 @@ def test_regenerate_cloud_review_enqueues(client, product, monkeypatch):
     res = client.post(f"/api/products/{product.id}/ai-reports/regenerate?mode=cloud_review")
     assert res.status_code == 202
     assert calls == [(product.id, True, "cloud_review")]
+
+
+# ---- GET cost-estimate (Phase 6) ------------------------------------------
+
+
+def test_get_includes_cost_estimate(session, client, product):
+    session.add(
+        _report(product.id, mode="cloud", model_name="gpt-4.1-mini", cost_estimate=0.0123)
+    )
+    session.commit()
+    body = client.get(f"/api/products/{product.id}/ai-reports").json()
+    assert body[0]["cost_estimate"] == 0.0123
+
+
+def test_cost_estimate_404(client):
+    assert client.get("/api/products/99999/ai-reports/cost-estimate").status_code == 404
+
+
+def test_cost_estimate_rejects_non_cloud_mode(client, product):
+    res = client.get(f"/api/products/{product.id}/ai-reports/cost-estimate?mode=local")
+    assert res.status_code == 422
+
+
+def test_cost_estimate_not_configured(client, product, monkeypatch):
+    monkeypatch.setattr(
+        ai_reports_route,
+        "get_settings",
+        lambda: Settings(cloud_ai_enable=True, ai_provider="openai", openai_api_key=""),
+    )
+    res = client.get(f"/api/products/{product.id}/ai-reports/cost-estimate?mode=cloud")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["available"] is False
+    assert body["reason"] == "cloud_not_configured"
+
+
+def test_cost_estimate_returns_estimate(client, product, monkeypatch):
+    monkeypatch.setattr(
+        ai_reports_route,
+        "get_settings",
+        lambda: Settings(cloud_ai_enable=True, ai_provider="openai", openai_api_key="sk-test"),
+    )
+    monkeypatch.setattr(
+        ai_reports_route,
+        "estimate_cost_for_product",
+        lambda session, product_id, mode: {
+            "available": True,
+            "mode": mode,
+            "model": "gpt-4.1-mini",
+            "currency": "USD",
+            "estimate_usd": 0.0042,
+        },
+    )
+    res = client.get(f"/api/products/{product.id}/ai-reports/cost-estimate?mode=cloud")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["available"] is True
+    assert body["estimate_usd"] == 0.0042
+    assert body["mode"] == "cloud"

@@ -12,10 +12,12 @@ re-runs and replaces the row for the current prompt version, while bumping
 `PROMPT_VERSION` in a prompt module creates a new row alongside the old so
 outputs stay diffable across prompt revisions.
 
-`mode` is `"local"` in Phase 5; Phase 6 cloud AI joins the same table with
-`"cloud"` (and `"hybrid"` for reviewer mode). `report_json` is the validated
+`mode` is `"local"` / `"local_vision"` (Phase 5) or `"cloud"` / `"cloud_review"`
+(Phase 6 — cloud text summary + reviewer critique of the local report).
+`cost_estimate` (USD) is recorded for cloud rows from the provider's token usage
+(null for local — local inference is free). `report_json` is the validated
 structured report (plan §7 shape); `input_summary_json` snapshots what we sent
-the model (measurements + metadata) for reproducibility and debugging.
+the model (measurements + metadata, plus the local report for reviewer mode).
 
 Failure model mirrors DataProductPreview / DataProductAnalysis: `attempts` is a
 JSON history, `last_error` the most recent message, `is_permanent_failure` flips
@@ -32,6 +34,7 @@ from sqlalchemy import (
     JSON,
     Boolean,
     DateTime,
+    Float,
     ForeignKey,
     String,
     UniqueConstraint,
@@ -78,5 +81,9 @@ class AiReport(Base, TimestampMixin):
     is_permanent_failure: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
+
+    # Phase 6: actual USD cost of a cloud generation (from the provider's token
+    # usage). Null for local rows (local inference is free) and for failed rows.
+    cost_estimate: Mapped[float | None] = mapped_column(Float)
 
     data_product: Mapped[DataProduct] = relationship(back_populates="ai_reports")

@@ -18,8 +18,13 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.db import get_session
 from app.models import AiReport, DataProduct
-from app.schemas.ai_report import AiReportRead, RegenerateResponse
+from app.schemas.ai_report import (
+    AiReportRead,
+    CostEstimateResponse,
+    RegenerateResponse,
+)
 from app.services.ai import cloud_config_error
+from app.services.ai_job import estimate_cost_for_product
 from app.services.ai_modes import (
     ALL_MODES,
     is_cloud_mode,
@@ -95,3 +100,24 @@ def regenerate_ai_report(
     return RegenerateResponse(
         status="skipped", enqueued=False, reason="queue_unavailable"
     )
+
+
+@router.get(
+    "/{product_id}/ai-reports/cost-estimate",
+    response_model=CostEstimateResponse,
+)
+def get_ai_cost_estimate(
+    product_id: int,
+    mode: str = "cloud",
+    session: Session = Depends(get_session),
+) -> CostEstimateResponse:
+    """Pre-run USD estimate for a cloud report, surfaced on the cloud buttons."""
+    if session.get(DataProduct, product_id) is None:
+        raise HTTPException(status_code=404, detail="product not found")
+    if mode not in ALL_MODES or not is_cloud_mode(mode):
+        raise HTTPException(
+            status_code=422, detail=f"cost estimate is only for cloud modes, got {mode!r}"
+        )
+    if cloud_config_error(get_settings()) is not None:
+        return CostEstimateResponse(available=False, reason="cloud_not_configured")
+    return CostEstimateResponse(**estimate_cost_for_product(session, product_id, mode))

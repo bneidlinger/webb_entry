@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { HealthBadge } from "@/components/health-badge";
 import { RegenerateAiButton } from "@/components/regenerate-ai-button";
 import {
+  getAiCostEstimate,
   getProduct,
   getProductAiReports,
   getProductAnalyses,
@@ -203,8 +204,19 @@ function severityClass(s: string): string {
   return "border-sky-500/30 bg-sky-500/5 text-sky-200";
 }
 
+function modeChip(mode: string): { label: string; className: string } | null {
+  if (mode === "local_vision")
+    return { label: "vision", className: "border-violet-400/40 bg-violet-400/10 text-violet-200" };
+  if (mode === "cloud")
+    return { label: "cloud", className: "border-cyan-400/40 bg-cyan-400/10 text-cyan-200" };
+  if (mode === "cloud_review")
+    return { label: "review", className: "border-amber-400/40 bg-amber-400/10 text-amber-200" };
+  return null; // local → no chip (it's the default)
+}
+
 function AiReportCard({ r }: { r: AiReportRead }) {
   const report = r.report_json;
+  const chip = modeChip(r.mode);
   return (
     <div className="rounded-lg border border-webb-accent/20 bg-webb-ink/40 p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -212,13 +224,16 @@ function AiReportCard({ r }: { r: AiReportRead }) {
           <span className="rounded border border-webb-accent/40 bg-webb-accent/10 px-2 py-0.5 text-xs uppercase tracking-wider text-webb-accent">
             AI-generated
           </span>
-          {r.mode === "local_vision" && (
-            <span className="rounded border border-violet-400/40 bg-violet-400/10 px-2 py-0.5 text-xs uppercase tracking-wider text-violet-200">
-              vision
+          {chip && (
+            <span
+              className={`rounded border px-2 py-0.5 text-xs uppercase tracking-wider ${chip.className}`}
+            >
+              {chip.label}
             </span>
           )}
           <span className="font-mono text-xs text-webb-star/50">
             {r.model_name} · {r.prompt_version}
+            {r.cost_estimate != null && ` · $${r.cost_estimate.toFixed(4)}`}
           </span>
         </div>
         <span className="text-xs text-webb-star/40">{formatDate(r.generated_at)}</span>
@@ -335,16 +350,54 @@ function AiReportCard({ r }: { r: AiReportRead }) {
   );
 }
 
+function AiColumn({
+  title,
+  subtitle,
+  reports,
+  emptyHint,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  reports: AiReportRead[];
+  emptyHint: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <div className="mb-2 flex items-baseline justify-between">
+        <h3 className="text-sm font-medium uppercase tracking-wider text-webb-accent">{title}</h3>
+        <span className="text-xs text-webb-star/40">{subtitle}</span>
+      </div>
+      {reports.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-webb-star/20 bg-webb-ink/40 p-5 text-sm text-webb-star/60">
+          {emptyHint}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {reports.map((r) => (
+            <AiReportCard key={r.id} r={r} />
+          ))}
+        </div>
+      )}
+      <div className="mt-4 flex flex-wrap gap-3">{children}</div>
+    </div>
+  );
+}
+
 export default async function ProductDetailPage({ params }: PageProps) {
   const { id } = await params;
   const productId = Number.parseInt(id, 10);
   if (!Number.isFinite(productId)) notFound();
 
-  const [productResult, analysisResult, aiReportsResult] = await Promise.all([
-    getProduct(productId),
-    getProductAnalyses(productId),
-    getProductAiReports(productId),
-  ]);
+  const [productResult, analysisResult, aiReportsResult, cloudEstResult, reviewEstResult] =
+    await Promise.all([
+      getProduct(productId),
+      getProductAnalyses(productId),
+      getProductAiReports(productId),
+      getAiCostEstimate(productId, "cloud"),
+      getAiCostEstimate(productId, "cloud_review"),
+    ]);
 
   if (!productResult.ok) {
     if (productResult.error.includes("404")) notFound();
@@ -360,6 +413,16 @@ export default async function ProductDetailPage({ params }: PageProps) {
   const product = productResult.data;
   const analyses = analysisResult.ok ? analysisResult.data : [];
   const aiReports = aiReportsResult.ok ? aiReportsResult.data : [];
+  const localReports = aiReports.filter((r) => r.mode.startsWith("local"));
+  const cloudReports = aiReports.filter((r) => r.mode.startsWith("cloud"));
+  const cloudEstimate =
+    cloudEstResult.ok && cloudEstResult.data.available
+      ? cloudEstResult.data.estimate_usd ?? null
+      : null;
+  const reviewEstimate =
+    reviewEstResult.ok && reviewEstResult.data.available
+      ? reviewEstResult.data.estimate_usd ?? null
+      : null;
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-12">
@@ -458,26 +521,48 @@ export default async function ProductDetailPage({ params }: PageProps) {
 
       <section className="mt-8">
         <div className="mb-3 flex items-baseline justify-between">
-          <h2 className="text-lg font-medium text-webb-star/90">AI summary</h2>
-          <span className="text-xs text-webb-star/40">local model · interpretation</span>
+          <h2 className="text-lg font-medium text-webb-star/90">AI interpretation</h2>
+          <span className="text-xs text-webb-star/40">local + cloud · hypothesis-generating</span>
         </div>
-        {aiReports.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-webb-star/20 bg-webb-ink/40 p-6 text-sm text-webb-star/60">
-            No AI summary yet. Reports are generated by a local Ollama model after deterministic
-            analysis, for watchlist-matched products. Enable it by installing Ollama, pulling a
-            model, and setting{" "}
-            <code className="rounded bg-webb-deep px-1.5 py-0.5 text-xs">LOCAL_AI_ENABLE=true</code>.
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {aiReports.map((r) => (
-              <AiReportCard key={r.id} r={r} />
-            ))}
-          </div>
-        )}
-        <div className="mt-4 flex flex-wrap gap-3">
-          <RegenerateAiButton productId={product.id} />
-          <RegenerateAiButton productId={product.id} vision />
+        <div className="grid gap-6 lg:grid-cols-2">
+          <AiColumn
+            title="Local model"
+            subtitle="free · on your machine"
+            reports={localReports}
+            emptyHint={
+              <>
+                No local summary yet. Install Ollama, pull a model, and set{" "}
+                <code className="rounded bg-webb-deep px-1.5 py-0.5 text-xs">
+                  LOCAL_AI_ENABLE=true
+                </code>
+                .
+              </>
+            }
+          >
+            <RegenerateAiButton productId={product.id} mode="local" />
+            <RegenerateAiButton productId={product.id} mode="local_vision" />
+          </AiColumn>
+          <AiColumn
+            title="Cloud model"
+            subtitle="OpenAI / Azure · costs apply"
+            reports={cloudReports}
+            emptyHint={
+              <>
+                No cloud report yet. Set a provider key and{" "}
+                <code className="rounded bg-webb-deep px-1.5 py-0.5 text-xs">
+                  CLOUD_AI_ENABLE=true
+                </code>
+                , then run a cloud summary or review.
+              </>
+            }
+          >
+            <RegenerateAiButton productId={product.id} mode="cloud" estimateUsd={cloudEstimate} />
+            <RegenerateAiButton
+              productId={product.id}
+              mode="cloud_review"
+              estimateUsd={reviewEstimate}
+            />
+          </AiColumn>
         </div>
       </section>
     </main>
