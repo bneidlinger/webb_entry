@@ -529,3 +529,48 @@ def test_cloud_auth_error_is_permanent(session, monkeypatch):
 
     assert result["is_permanent"] is True
     assert next(r for r in prod.ai_reports if r.mode == "cloud").is_permanent_failure is True
+
+
+# ---- reviewer mode (Phase 6) ----------------------------------------------
+
+
+def test_cloud_review_requires_local_report(session, monkeypatch):
+    _enable(monkeypatch, cloud_enable=True)
+    _install(monkeypatch, _FakeProvider(error=AssertionError("must not call provider")))
+    prod = _seed_product(session)
+    _add_analysis(session, prod)
+    assert ai_job._run(session, prod.id, mode="cloud_review")["reason"] == "no_local_report"
+
+
+def test_cloud_review_injects_local_report(session, monkeypatch):
+    _enable(monkeypatch, enable=True, cloud_enable=True)
+    prod = _seed_product(session)
+    _add_analysis(session, prod)
+
+    # First produce a local report for the reviewer to critique.
+    _install(monkeypatch, _FakeProvider(text=_VALID_JSON))
+    ai_job._run(session, prod.id, mode="local")
+    session.commit()
+
+    review_provider = _install(
+        monkeypatch,
+        _FakeProvider(
+            text=json.dumps(
+                {"summary": "The local report overstates the cluster claim.", "tags": ["review"]}
+            )
+        ),
+    )
+    result = ai_job._run(session, prod.id, mode="cloud_review")
+    session.commit()
+    session.refresh(prod)
+
+    assert result["status"] == "ok"
+    assert result["mode"] == "cloud_review"
+    assert result["model_name"] == "cloud-model"
+    # The prior local report's summary reached the reviewer prompt + the audit record.
+    assert "NIRCam" in review_provider.calls[0]["user"]
+    row = next(r for r in prod.ai_reports if r.mode == "cloud_review")
+    assert row.input_summary_json["local_report"]["summary"].startswith("A NIRCam")
+    assert row.report_json["model_notes"]["mode"] == "cloud_review"
+    # local + cloud_review coexist as separate rows.
+    assert {r.mode for r in prod.ai_reports} == {"local", "cloud_review"}

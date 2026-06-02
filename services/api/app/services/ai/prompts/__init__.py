@@ -13,8 +13,10 @@ from __future__ import annotations
 
 from types import ModuleType
 
-from app.services.ai.prompts import image_summary_v1, spectrum_summary_v1
+from app.services.ai.prompts import image_summary_v1, reviewer_v1, spectrum_summary_v1
 
+# Kind-dispatched summary prompts. reviewer_v1 is intentionally absent — it is
+# kind-agnostic and selected by mode (cloud_review), not by measurement kind.
 _PROMPTS: dict[str, ModuleType] = {
     "image": image_summary_v1,
     "spectrum": spectrum_summary_v1,
@@ -28,4 +30,4 @@ def get_prompt_for(kind: str | None) -> ModuleType | None:
     return _PROMPTS.get(kind.lower())
 
 
-__all__ = ["get_prompt_for", "image_summary_v1", "spectrum_summary_v1"]
+__all__ = ["get_prompt_for", "image_summary_v1", "reviewer_v1", "spectrum_summary_v1"]

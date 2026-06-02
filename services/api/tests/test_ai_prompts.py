@@ -8,6 +8,7 @@ from __future__ import annotations
 from app.services.ai.prompts import (
     get_prompt_for,
     image_summary_v1,
+    reviewer_v1,
     spectrum_summary_v1,
 )
 
@@ -107,3 +108,42 @@ def test_spectrum_vision_prompt_warns_against_reading_chart():
     assert spectrum_summary_v1.SYSTEM_PROMPT in vsys
     assert "chart" in vsys.lower()
     assert "authoritative" in vsys.lower()
+
+
+# ---- reviewer (Phase 6) ---------------------------------------------------
+
+
+def _review_payload() -> dict:
+    return {
+        "product": {"filename": "jw01234_i2d.fits", "product_type": "i2d"},
+        "observation": {"target_name": "M82", "instrument": "NIRCAM"},
+        "measurements": {"kind": "image", "source_count": 42},
+        "local_report": {
+            "summary": "A crowded NIRCam field with dozens of point sources.",
+            "interesting_features": [
+                {"feature": "possible cluster", "evidence": "42 sources", "confidence": "high"}
+            ],
+        },
+    }
+
+
+def test_reviewer_prompt_declares_version():
+    assert reviewer_v1.PROMPT_VERSION == "v1"
+
+
+def test_reviewer_system_prompt_frames_critique():
+    sys = reviewer_v1.SYSTEM_PROMPT
+    low = sys.lower()
+    assert "ground truth" in low
+    assert "unsupported" in low
+    assert "reviewer" in low
+    assert "human_validation_required" in sys
+
+
+def test_reviewer_user_prompt_includes_local_report_and_measurements():
+    prompt = reviewer_v1.build_user_prompt(_review_payload())
+    # The prior report under review AND the measurements it's checked against.
+    assert "crowded NIRCam field" in prompt
+    assert "possible cluster" in prompt
+    assert "source_count" in prompt
+    assert "M82" in prompt

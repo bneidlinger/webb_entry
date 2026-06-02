@@ -17,9 +17,10 @@ from __future__ import annotations
 MODE_LOCAL = "local"
 MODE_LOCAL_VISION = "local_vision"
 MODE_CLOUD = "cloud"
+MODE_CLOUD_REVIEW = "cloud_review"
 
-# Modes the API + job currently accept. cloud_review joins when reviewer mode lands.
-ALL_MODES = (MODE_LOCAL, MODE_LOCAL_VISION, MODE_CLOUD)
+# Modes the API + job accept.
+ALL_MODES = (MODE_LOCAL, MODE_LOCAL_VISION, MODE_CLOUD, MODE_CLOUD_REVIEW)
 
 
 def is_cloud_mode(mode: str) -> bool:

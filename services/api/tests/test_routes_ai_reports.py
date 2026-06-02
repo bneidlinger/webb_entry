@@ -230,3 +230,21 @@ def test_regenerate_cloud_enqueues_when_configured(client, product, monkeypatch)
 def test_regenerate_unknown_mode_is_422(client, product):
     res = client.post(f"/api/products/{product.id}/ai-reports/regenerate?mode=bogus")
     assert res.status_code == 422
+
+
+def test_regenerate_cloud_review_enqueues(client, product, monkeypatch):
+    monkeypatch.setattr(
+        ai_reports_route,
+        "get_settings",
+        lambda: Settings(cloud_ai_enable=True, ai_provider="openai", openai_api_key="sk-test"),
+    )
+    calls: list[tuple[int, bool, str]] = []
+
+    def _fake(product_id, *, force=False, mode="local"):
+        calls.append((product_id, force, mode))
+        return True
+
+    monkeypatch.setattr(ai_reports_route, "enqueue_ai_report", _fake)
+    res = client.post(f"/api/products/{product.id}/ai-reports/regenerate?mode=cloud_review")
+    assert res.status_code == 202
+    assert calls == [(product.id, True, "cloud_review")]

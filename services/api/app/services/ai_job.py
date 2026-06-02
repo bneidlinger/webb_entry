@@ -44,9 +44,10 @@ from app.config import Settings, get_settings
 from app.db import session_scope
 from app.models import AiReport, DataProduct, DataProductAnalysis, Observation
 from app.services.ai import AiError, cloud_config_error, get_ai_provider, parse_ai_report
-from app.services.ai.prompts import get_prompt_for
+from app.services.ai.prompts import get_prompt_for, reviewer_v1
 from app.services.ai_modes import (
     MODE_CLOUD,
+    MODE_CLOUD_REVIEW,
     MODE_LOCAL,
     MODE_LOCAL_VISION,
     is_cloud_mode,
@@ -68,6 +69,7 @@ class _PassSpec:
     prompt_version: str
     system_prompt: str
     with_image: bool
+    needs_local_report: bool
     is_cloud: bool
 
 
@@ -109,15 +111,30 @@ def _run(
         return {"product_id": product_id, "status": "skipped", "reason": "no_analysis"}
 
     measurements = analysis.measurements_json or {}
-    prompt = get_prompt_for(measurements.get("kind"))
-    if prompt is None:
+    kind_prompt = get_prompt_for(measurements.get("kind"))
+    if kind_prompt is None:
         return {
             "product_id": product_id,
             "status": "skipped",
             "reason": "unsupported_kind",
         }
+    # Reviewer mode critiques the local report with its own kind-agnostic prompt;
+    # the other modes narrate with the kind-specific summary prompt.
+    prompt = reviewer_v1 if mode == MODE_CLOUD_REVIEW else kind_prompt
 
     spec = _resolve_pass_spec(mode, prompt, settings)
+
+    # Reviewer mode needs a prior successful local report to critique.
+    local_report = None
+    if spec.needs_local_report:
+        local = _latest_successful_local_report(session, product_id)
+        if local is None:
+            return {
+                "product_id": product_id,
+                "status": "skipped",
+                "reason": "no_local_report",
+            }
+        local_report = local.report_json
 
     existing = _find_existing(session, product_id, spec.mode, spec.model_name, spec.prompt_version)
     if not force and existing and existing.is_permanent_failure:
@@ -140,7 +157,7 @@ def _run(
         return {"product_id": product_id, "status": "skipped", "reason": "no_preview"}
 
     observation = session.get(Observation, product.observation_id)
-    payload = _build_payload(product, observation, measurements)
+    payload = _build_payload(product, observation, measurements, local_report=local_report)
 
     # ---- call the model + validate output ------------------------------
     try:
@@ -196,7 +213,7 @@ def _run(
 
 
 def _resolve_pass_spec(mode: str, prompt, settings: Settings) -> _PassSpec:
-    """Map a `mode` + the kind-specific prompt module into a concrete pass."""
+    """Map a `mode` + its prompt module into a concrete pass."""
     if mode == MODE_LOCAL:
         return _PassSpec(
             mode=MODE_LOCAL,
@@ -204,6 +221,7 @@ def _resolve_pass_spec(mode: str, prompt, settings: Settings) -> _PassSpec:
             prompt_version=prompt.PROMPT_VERSION,
             system_prompt=prompt.SYSTEM_PROMPT,
             with_image=False,
+            needs_local_report=False,
             is_cloud=False,
         )
     if mode == MODE_LOCAL_VISION:
@@ -213,6 +231,7 @@ def _resolve_pass_spec(mode: str, prompt, settings: Settings) -> _PassSpec:
             prompt_version=prompt.VISION_PROMPT_VERSION,
             system_prompt=prompt.VISION_SYSTEM_PROMPT,
             with_image=True,
+            needs_local_report=False,
             is_cloud=False,
         )
     if mode == MODE_CLOUD:
@@ -222,6 +241,17 @@ def _resolve_pass_spec(mode: str, prompt, settings: Settings) -> _PassSpec:
             prompt_version=prompt.PROMPT_VERSION,
             system_prompt=prompt.SYSTEM_PROMPT,
             with_image=False,
+            needs_local_report=False,
+            is_cloud=True,
+        )
+    if mode == MODE_CLOUD_REVIEW:
+        return _PassSpec(
+            mode=MODE_CLOUD_REVIEW,
+            model_name=_cloud_model_name(settings),
+            prompt_version=prompt.PROMPT_VERSION,
+            system_prompt=prompt.SYSTEM_PROMPT,
+            with_image=False,
+            needs_local_report=True,
             is_cloud=True,
         )
     raise ValueError(f"unsupported mode: {mode}")
@@ -251,6 +281,19 @@ def _latest_successful_analysis(
     )
 
 
+def _latest_successful_local_report(session: Session, product_id: int) -> AiReport | None:
+    """The newest successful local (mode="local") report — reviewer mode's input."""
+    return session.scalar(
+        select(AiReport)
+        .where(
+            AiReport.data_product_id == product_id,
+            AiReport.mode == MODE_LOCAL,
+            AiReport.report_json.is_not(None),
+        )
+        .order_by(AiReport.generated_at.desc().nulls_last())
+    )
+
+
 def _full_preview_ready(product: DataProduct) -> bool:
     return any(p.variant == VARIANT_FULL and p.storage_uri for p in product.previews)
 
@@ -269,12 +312,16 @@ def _read_preview_bytes(settings: Settings, product: DataProduct) -> bytes:
 
 
 def _build_payload(
-    product: DataProduct, observation: Observation | None, measurements: dict
+    product: DataProduct,
+    observation: Observation | None,
+    measurements: dict,
+    local_report: dict | None = None,
 ) -> dict:
     """The metadata + measurements snapshot sent to the model and persisted as
-    `input_summary_json`. ORM objects in, plain JSON-serializable dict out."""
+    `input_summary_json`. ORM objects in, plain JSON-serializable dict out. For
+    reviewer mode, `local_report` (the prior report under review) is included."""
     obs = observation
-    return {
+    payload: dict = {
         "product": {
             "filename": product.filename,
             "product_type": product.product_type,
@@ -304,6 +351,9 @@ def _build_payload(
         },
         "measurements": measurements,
     }
+    if local_report is not None:
+        payload["local_report"] = local_report
+    return payload
 
 
 def _find_existing(
