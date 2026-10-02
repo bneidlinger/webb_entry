@@ -51,7 +51,7 @@ class DataProduct(Base, TimestampMixin):
     calibration_version: Mapped[str | None] = mapped_column(String(64))
     crds_context: Mapped[str | None] = mapped_column(String(64))
 
-    cloud_uri: Mapped[str | None] = mapped_column(String(1024))
+    cloud_uri: Mapped[str | None] = mapped_column(String(1024), index=True)
     mast_download_uri: Mapped[str | None] = mapped_column(String(1024))
 
     is_public: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

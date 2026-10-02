@@ -1,4 +1,6 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const API_BASE = process.env.API_INTERNAL_URL
+  ?? process.env.NEXT_PUBLIC_API_BASE_URL
+  ?? "http://localhost:8000";
 
 export interface HealthPayload {
   status: string;
@@ -263,6 +265,26 @@ export interface CostEstimateResponse {
   currency?: string | null;
   estimate_usd?: number | null;
   reason?: string | null;
+}
+
+export interface CloudModelOption {
+  id: string;
+  label: string;
+  provider: string;
+  configured: boolean;
+  enabled: boolean;
+}
+
+export async function getCloudModels(id: number): Promise<Result<CloudModelOption[]>> {
+  try {
+    const res = await fetch(`${API_BASE}/api/products/${id}/ai-reports/cloud-models`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    return { ok: true, data: (await res.json()) as CloudModelOption[] };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 export async function getAiCostEstimate(

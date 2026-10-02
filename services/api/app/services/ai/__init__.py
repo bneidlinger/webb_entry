@@ -2,7 +2,7 @@
 
 This package holds the provider-neutral protocol (`base`), the structured-report
 schema + tolerant output parsing (`schemas`), the providers (`local` = Ollama,
-`cloud` = OpenAI / Azure OpenAI), shared message shaping (`_messages`), cloud cost
+`cloud` = OpenAI / Azure OpenAI, `anthropic` = Claude), message shaping (`_messages`), cloud cost
 pricing (`pricing`), and the versioned prompt templates (`prompts`). Orchestration
 lives one level up in `app.services.ai_job`, mirroring how `analysis_job` drives
 `analysis/`.
@@ -26,7 +26,7 @@ def get_ai_provider(settings: Settings, *, mode: str = "local") -> AiProvider:
     """Construct the AI provider for a report `mode`.
 
     Local modes (``local`` / ``local_vision``) use Ollama; cloud modes (``cloud`` /
-    ``cloud_review`` and a future ``cloud_vision``) use OpenAI / Azure OpenAI per
+    ``cloud_review`` and a future ``cloud_vision``) use OpenAI / Azure OpenAI / Anthropic per
     ``settings.ai_provider``. Kept a factory so the job layer never imports a
     concrete provider.
     """
@@ -56,6 +56,9 @@ def _validate_cloud_config(settings: Settings) -> None:
     if settings.ai_provider == "openai":
         if not settings.openai_api_key:
             raise CloudAIConfigError("OPENAI_API_KEY is not set")
+    elif settings.ai_provider == "anthropic":
+        if not settings.anthropic_api_key:
+            raise CloudAIConfigError("ANTHROPIC_API_KEY is not set")
     elif settings.ai_provider == "azure_openai":
         if not settings.azure_openai_endpoint:
             raise CloudAIConfigError("AZURE_OPENAI_ENDPOINT is not set")
@@ -74,6 +77,18 @@ def _validate_cloud_config(settings: Settings) -> None:
 def _build_cloud_provider(settings: Settings, *, vision: bool = False) -> AiProvider:
     _validate_cloud_config(settings)
     timeout = float(settings.cloud_ai_request_timeout_seconds)
+
+    if settings.ai_provider == "anthropic":
+        from anthropic import Anthropic
+
+        from app.services.ai.anthropic import AnthropicProvider
+
+        return AnthropicProvider(
+            client=Anthropic(api_key=settings.anthropic_api_key, timeout=timeout, max_retries=0),
+            model=settings.anthropic_model,
+            pricing=price_for(settings.anthropic_model),
+            effort=settings.cloud_ai_reasoning_effort,
+        )
 
     if settings.ai_provider == "openai":
         from openai import OpenAI
@@ -117,6 +132,9 @@ def _build_cloud_provider(settings: Settings, *, vision: bool = False) -> AiProv
         model=model,
         pricing=price_for(model),
         supports_json_schema=supports_json_schema,
+        reasoning_effort=(
+            settings.cloud_ai_reasoning_effort if model == "gpt-6.1-sol" else None
+        ),
     )
 
 

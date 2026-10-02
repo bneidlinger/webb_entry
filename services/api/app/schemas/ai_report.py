@@ -40,6 +40,14 @@ class RegenerateResponse(BaseModel):
     reason: str | None = None
 
 
+class CloudModelOption(BaseModel):
+    id: str
+    label: str
+    provider: str
+    configured: bool
+    enabled: bool
+
+
 class CostEstimateResponse(BaseModel):
     """Pre-run cost estimate for a cloud report mode.
 

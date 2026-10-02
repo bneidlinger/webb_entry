@@ -48,12 +48,14 @@ class CloudAiProvider(AiProvider):
         model: str,
         pricing: ModelPricing | None = None,
         supports_json_schema: bool = True,
+        reasoning_effort: str | None = None,
     ) -> None:
         self.name = name
         self._client = client
         self._model = model
         self._pricing = pricing
         self._supports_json_schema = supports_json_schema
+        self._reasoning_effort = reasoning_effort
 
     def health(self) -> AiProviderHealth:
         try:
@@ -86,6 +88,10 @@ class CloudAiProvider(AiProvider):
             }
         else:
             response_format = {"type": "json_object"}
+        generation = (
+            {"max_completion_tokens": max_tokens, "reasoning_effort": self._reasoning_effort}
+            if self._reasoning_effort else {"max_tokens": max_tokens, "temperature": temperature}
+        )
         try:
             resp = self._client.chat.completions.create(
                 model=self._model,
@@ -94,8 +100,7 @@ class CloudAiProvider(AiProvider):
                     {"role": "user", "content": user_content},
                 ],
                 response_format=response_format,
-                max_tokens=max_tokens,
-                temperature=temperature,
+                **generation,
             )
         except (AuthenticationError, PermissionDeniedError) as exc:
             raise AiError(f"cloud_auth_error: {exc}", is_permanent=True) from exc
@@ -110,6 +115,10 @@ class CloudAiProvider(AiProvider):
         except APIError as exc:
             raise AiError(f"cloud_api_error: {exc}", is_permanent=False) from exc
 
+        if getattr(resp.choices[0], "finish_reason", None) == "length":
+            raise AiError("cloud_output_truncated: increase the token budget", is_permanent=False)
+        if getattr(resp.choices[0].message, "refusal", None):
+            raise AiError("cloud_refusal", is_permanent=True)
         text = resp.choices[0].message.content or ""
         usage_obj = getattr(resp, "usage", None)
         cost = cost_from_usage(usage_obj, self._pricing) if self._pricing else None

@@ -29,6 +29,9 @@ class ModelPricing:
 # Keyed by OpenAI model id. Azure deployment names that match a model id resolve
 # here too; a custom Azure deployment name falls back to `_DEFAULT`. Bump as needed.
 _PRICES: dict[str, ModelPricing] = {
+    # Standard short-context list prices, verified against provider docs 2026-10-01.
+    "gpt-6.1-sol": ModelPricing(0.002, 0.010),
+    "claude-opus-5-5": ModelPricing(0.004, 0.020),
     "gpt-4.1": ModelPricing(0.002, 0.008),
     "gpt-4.1-mini": ModelPricing(0.0004, 0.0016),
     "gpt-4.1-nano": ModelPricing(0.0001, 0.0004),

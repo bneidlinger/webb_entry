@@ -54,4 +54,20 @@ Without Docker (until Docker Desktop is installed), see [`docs/local-dev-without
 
 ## Status
 
-Phase 0 — initial scaffold. See plan §11 for roadmap.
+Metadata ingestion, watchlists, previews, deterministic analysis, and optional local/cloud
+AI are implemented. Local sample testing is available without Docker or Redis:
+
+```powershell
+# From services/api, after installing the venv and applying migrations:
+.\.venv\Scripts\python.exe -m app ingest mast --instrument NIRCAM --limit 1 --json
+.\.venv\Scripts\python.exe -m app sample run --limit 3 --max-file-mib 16 --max-total-mib 32
+.\.venv\Scripts\python.exe -m app sample benchmark --observations 100 --products-per-observation 10
+# From the repository root:
+.\scripts\start-local.ps1
+```
+
+The sample command downloads each selected FITS file once for previews and analysis,
+skips completed products on rerun, and makes no AI calls. The benchmark uses synthetic
+metadata in an isolated in-memory database. See [local development](docs/local-dev-without-docker.md)
+and the [scale review and measured results](docs/HANDOFF.md#13-scale-review-and-local-validation-2026-10-01).
+Exabyte-scale operation is a future architecture target, not a tested capability.

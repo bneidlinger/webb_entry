@@ -2,7 +2,8 @@
 
 **Audience.** A Claude (or human engineer) opening this repo cold who needs to be production-effective inside one session. This document complements — does not replace — [`CLAUDE.md`](../CLAUDE.md) (per-session orientation) and [`webbwatch_ai_project_plan.md`](../webbwatch_ai_project_plan.md) (design source of truth). Read this once at the start of any meaningful work; it codifies *why*, *what we know*, and *what we deliberately don't*. Skim in 3 min; deep-read in 10. Length is the price of not repeating mistakes.
 
-**Last updated.** End of Phase 6 (2026-06-02).
+**Last updated.** Local scale review and sample validation (2026-10-01). See section 13
+for current bounded processing and startup behavior; earlier phase notes retain history.
 
 ---
 
@@ -702,3 +703,129 @@ Already in `CLAUDE.md` but repeated here so this document is freestanding.
 ## 12. If you change something on this list, update this document
 
 This file is the contract between past and future sessions. If you change an invariant, a code map entry, a deferred-work entry, or a known pitfall, update *this* file in the same commit. Otherwise the next session will be wrong before it starts.
+
+## 13. Scale review and local validation (2026-10-01)
+
+The exabyte figure is a design target for the potential source archive, not a measured
+JWST archive size or a claim that this application processes exabytes. Keep source
+objects in their archive and select a small subset for processing. The existing
+single-database, whole-FITS worker architecture is a local prototype.
+
+### Fixed in this review
+
+- MAST observation limits now reach the server as `pagesize=limit, page=1`, with
+  `dataRights=PUBLIC`. Previously all matching observations were fetched and then sliced.
+  This is a bounded first page, not a guarantee of newest-first ordering or full coverage.
+  [Astroquery's documented page semantics](https://astroquery.readthedocs.io/en/stable/api/astroquery.mast.ObservationsClass.html)
+  explain why both arguments are needed.
+- Preview and analysis jobs resolve MAST-only URIs on demand via astroquery's cloud
+  lookup. All 42 saved catalog rows initially lacked cloud URIs and could not be processed.
+  Only products selected for work incur the lookup; metadata ingest stays lightweight.
+- FITS reads check response size, limit the body read, close the stream, and use network
+  timeouts. The default cap is 256 MiB; exceeding it remains retryable after changing the
+  budget. This does not bound decompression or numerical-array RAM usage.
+- Ingest queries existing products in batches of at most 500 input filenames per
+  observation. Product feed previews use eager batch loading instead of one query per row.
+- S3 reconciliation looks up only the current batch of at most 500 candidate URIs.
+  Migration `b814a213fc20` adds the cloud URI index. `known` now means known among scanned
+  objects, not the size of the entire catalog.
+- Docker builds include package readmes and source before installation, the worker
+  installs the shared API package, and the API applies migrations before accepting work.
+  Compose has a separate rq-scheduler dispatcher and an internal server-rendering API URL.
+  Scheduled IDs use RQ-compatible dashes; the old colon-separated IDs failed validation
+  with the installed RQ 2.12. The API now declares RQ so its enqueue endpoints can work.
+  Local previews default to a shared volume; `PREVIEW_LOCAL_DIRECTORY` supports that path.
+  The Python Azure SDK requires a full connection string, so `.env.example` leaves it empty.
+- `app.cli.sample` / `app.services.samples` add bounded real-FITS runs and isolated metadata
+  benchmarks. `scripts/start-local.ps1` launches the native API and frontend with logs.
+
+### Measured results
+
+Python 3.13 on this Windows machine, SQLite in memory, 10 synthetic products per
+observation. Single measurements, without network, watchlists, AI, or queueing. These
+are functional/performance smoke tests, not capacity projections or production throughput.
+
+| Products | Initial ingest | Replay | Replay SQL statements | Replay inserts |
+|---:|---:|---:|---:|---:|
+| 100 | 0.0415 s | 0.0139 s | 31 | 0 |
+| 1,000 | 0.2536 s | 0.1384 s | 301 | 0 |
+| 10,000 | 2.5461 s | 1.7103 s | 3,001 | 0 |
+
+Real FITS sample: saved product IDs 13, 20, and 27 (program 1193; Fomalhaut/Vega
+NIRCam coronagraphic images), 25,320,960 bytes total. All three produced full + thumbnail
+PNGs and deterministic image measurements. One download per file; no AI calls. Replay
+downloaded zero bytes. The feed and product 27's preview/measurements rendered in the
+local browser. API: 258 tests passed; worker: 4 tests passed; both Ruff checks pass;
+frontend production build, lint, and type checking pass. Alembic upgrade and schema
+drift check pass. Docker is not installed here, so container startup remains unverified.
+The separate live one-observation MAST catalog dry run stalled and was cancelled; server
+paging is covered by regression tests but that live catalog check is unverified. Cloud
+path lookup and the three anonymous S3 downloads did succeed.
+
+### Work required before archive-wide operation
+
+1. Incremental ingestion with durable release-time checkpoints, overlap windows, and
+   resumable backfills. MAST currently samples page 1; S3 samples the first prefix page(s)
+   each run. Neither is a complete archive change detector. Product lists for individual
+   observations can still be large.
+2. A transactional outbox between DB commits and queue delivery, idempotent consumers,
+   retry/dead-letter handling, and backpressure. Existing ingest/analysis enqueue inside
+   their DB transaction; a fast worker can race the commit. The local sample bypasses RQ.
+3. Chunked/range FITS access or tiled derivatives, decoded-array memory limits, and
+   bounded scratch storage. Ordinary separate preview/analysis jobs still download twice;
+   only `sample run` currently shares one download. Keep bulk computation near source data
+   and move compact products/measurements to Azure when appropriate.
+4. Partitioned metadata, database-native bulk upserts, cursor pagination instead of deep
+   offsets and repeated total counts, then PostgreSQL load tests with realistic indexes,
+   concurrency, watchlists, and data distributions.
+5. Authentication/authorization for admin and write endpoints before public deployment;
+   rate/byte/job budgets, observability, retention and verified Blob access policies.
+
+Grow tests in stages: 100k/1M metadata rows in PostgreSQL; mixed image/spectrum/cube
+corpora with measured peak RAM and byte budgets; then concurrent workers under failures,
+restarts, queue saturation and replay. No exabyte capacity extrapolation from these timings.
+
+## 14. Cloud model selection (2026-10-01)
+
+- Added per-request `cloud_model=gpt-6.1-sol|claude-opus-5-5` for cloud summaries
+  and reviews. It passes from the UI through API validation and RQ into the worker;
+  settings are copied per call and the configured default is preserved. Report
+  identity includes the model, so comparing models does not overwrite either report.
+- Added the Anthropic Messages adapter and SDK dependency. Opus 5.5 uses
+  `output_config.format` for JSON Schema, with effort and no temperature. Thinking
+  blocks are excluded from the report. GPT-6.1 Sol uses Chat Completions with
+  `max_completion_tokens`, reasoning effort, JSON Schema, and no temperature.
+  Truncation is retryable; refusal and invalid credentials are permanent failures.
+- New models use `CLOUD_AI_REASONING_MAX_TOKENS=8192` (reasoning plus final output)
+  and `CLOUD_AI_REASONING_EFFORT=medium`. Older configured models keep the existing
+  1,536-token budget. Standard input/output estimates per million tokens are
+  $2/$10 for Sol and $4/$20 for Opus, verified against the official model pages
+  linked in [local setup](local-dev-without-docker.md#5-cloud-model-choices).
+  Estimates do not account for cache discounts or special service tiers.
+- The model-options endpoint exposes readiness booleans only. Missing keys,
+  disabled cloud generation, unavailable estimates, and missing prerequisite
+  analysis/local summaries disable the corresponding UI action.
+- Validation: 280 API + worker tests pass, including real SDK serialization through
+  mock transports, model-specific pricing/budgets, HTTP-to-queue model propagation,
+  and separate persisted reports. Ruff and the web production build (including lint
+  and type checks) pass. No paid cloud calls or live Redis worker execution were tested.
+
+### Local output smoke test
+
+Product 27 (Vega, NIRCam F444W) was processed through the real local report job with
+the already-installed Ollama `llama3.2:3b` model. The process used
+`LOCAL_AI_ENABLE=true`, `LOCAL_AI_MODEL=llama3.2:3b`, `LOCAL_AI_MAX_TOKENS=1536`,
+and a 180-second request timeout; cloud generation stayed disabled. Calling
+`generate_ai_report_for_product(27, mode="local")` directly exercised the same job
+used by the worker without requiring Redis. These were process-only settings.
+
+The run took 60.52 seconds and incurred no paid API charges. Its JSON passed schema
+validation, persisted in the local database, and rendered on the product page.
+Reported dimensions, background statistics, date, target, instrument, filter, and
+file size agreed with the input (allowing rounding). The report correctly described
+the source count as a coarse connected-components estimate, but incorrectly used
+that count as evidence for a "Vega Target" feature. This demonstrates a semantic
+quality gap that schema validation alone cannot catch; the source of the target
+identity is archive metadata. Strengthen evidence checks before paid batch runs.
+This test does not establish Opus/Sol output quality. The raw report, its inputs,
+screenshots, SQLite database, and downloaded samples remain ignored local artifacts.

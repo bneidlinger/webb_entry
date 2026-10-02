@@ -11,7 +11,7 @@ Phase 4 analyzers already computed (plan §6 + §13 — the model never sees FIT
 Several modes share this flow, resolved into a `_PassSpec`:
   - `mode="local"`        — Ollama text pass over measurements + metadata.
   - `mode="local_vision"` — Ollama multimodal pass (also attaches the preview PNG).
-  - `mode="cloud"`        — OpenAI / Azure OpenAI text pass (Phase 6). On-demand +
+  - `mode="cloud"`        — OpenAI / Azure OpenAI / Anthropic text pass. On-demand +
     cost-gated; never auto-chained from ingest/analysis.
 
 Flow per product (per mode):
@@ -55,6 +55,7 @@ from app.services.ai_modes import (
     mode_disabled_reason,
     mode_enabled,
 )
+from app.services.cloud_models import cloud_max_tokens, cloud_model_name, select_cloud_model
 from app.services.previews import VARIANT_FULL
 from app.services.storage import get_preview_storage, preview_storage_key
 
@@ -75,17 +76,22 @@ class _PassSpec:
 
 
 def generate_ai_report_for_product(
-    product_id: int, force: bool = False, mode: str = MODE_LOCAL
+    product_id: int, force: bool = False, mode: str = MODE_LOCAL, cloud_model: str | None = None,
 ) -> dict:
     """RQ entry point. Returns a small summary dict (also useful for tests)."""
     with session_scope() as session:
-        return _run(session, product_id, force=force, mode=mode)
+        return _run(session, product_id, force=force, mode=mode, cloud_model=cloud_model)
 
 
 def _run(
-    session: Session, product_id: int, *, force: bool = False, mode: str = MODE_LOCAL
+    session: Session, product_id: int, *, force: bool = False, mode: str = MODE_LOCAL,
+    cloud_model: str | None = None,
 ) -> dict:
     settings = get_settings()
+    if cloud_model is not None:
+        if not is_cloud_mode(mode):
+            raise ValueError("cloud_model is only supported for cloud modes")
+        settings = select_cloud_model(settings, cloud_model)
 
     if not mode_enabled(settings, mode):
         return {
@@ -196,6 +202,7 @@ def _run(
         "prompt_version": spec.prompt_version,
         "mode": spec.mode,
         "created_at": datetime.now(UTC).isoformat(),
+        "provider": settings.ai_provider if spec.is_cloud else "ollama",
     }
     _upsert_success(
         session,
@@ -267,24 +274,23 @@ def _resolve_pass_spec(mode: str, prompt, settings: Settings) -> _PassSpec:
 
 
 def _cloud_model_name(settings: Settings) -> str:
-    """The cloud row's model_name: the OpenAI model id, or the Azure deployment."""
-    if settings.ai_provider == "openai":
-        return settings.openai_model
-    return settings.azure_openai_deployment_chat
+    return cloud_model_name(settings)
 
 
 def _max_tokens_for(spec: _PassSpec, settings: Settings) -> int:
-    return settings.cloud_ai_max_tokens if spec.is_cloud else settings.local_ai_max_tokens
+    return cloud_max_tokens(settings) if spec.is_cloud else settings.local_ai_max_tokens
 
 
-def estimate_cost_for_product(session: Session, product_id: int, mode: str) -> dict:
+def estimate_cost_for_product(
+    session: Session, product_id: int, mode: str, *, cloud_model: str | None = None,
+) -> dict:
     """Pre-run USD estimate for generating a `mode` report on `product_id`.
 
     Reuses the exact payload + prompt the job would send so the estimate tracks
     reality. Returns ``{"available": False, "reason": ...}`` when there's nothing to
     price yet (no analysis, or no local report to review).
     """
-    settings = get_settings()
+    settings = select_cloud_model(get_settings(), cloud_model)
     product = session.get(DataProduct, product_id)
     if product is None:
         return {"available": False, "reason": "not_found"}

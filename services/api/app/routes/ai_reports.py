@@ -20,6 +20,7 @@ from app.db import get_session
 from app.models import AiReport, DataProduct
 from app.schemas.ai_report import (
     AiReportRead,
+    CloudModelOption,
     CostEstimateResponse,
     RegenerateResponse,
 )
@@ -31,9 +32,37 @@ from app.services.ai_modes import (
     mode_disabled_reason,
     mode_enabled,
 )
+from app.services.cloud_models import (
+    CLOUD_MODELS,
+    CloudModel,
+    cloud_model_name,
+    select_cloud_model,
+)
 from app.services.queue import enqueue_ai_report
 
 router = APIRouter(prefix="/api/products", tags=["ai-reports"])
+
+
+@router.get("/{product_id}/ai-reports/cloud-models", response_model=list[CloudModelOption])
+def get_cloud_models(
+    product_id: int, session: Session = Depends(get_session),
+) -> list[CloudModelOption]:
+    if session.get(DataProduct, product_id) is None:
+        raise HTTPException(status_code=404, detail="product not found")
+    settings = get_settings()
+    options = []
+    for model, (label, provider) in CLOUD_MODELS.items():
+        selected = select_cloud_model(settings, model)
+        options.append(CloudModelOption(
+            id=model, label=label, provider=provider,
+            configured=cloud_config_error(selected) is None, enabled=settings.cloud_ai_enable,
+        ))
+    options.append(CloudModelOption(
+        id="configured", label=f"Configured default ({cloud_model_name(settings)})",
+        provider=settings.ai_provider, configured=cloud_config_error(settings) is None,
+        enabled=settings.cloud_ai_enable,
+    ))
+    return options
 
 
 @router.get("/{product_id}/ai-reports", response_model=list[AiReportRead])
@@ -74,6 +103,7 @@ def regenerate_ai_report(
     product_id: int,
     mode: str = "local",
     vision: bool = False,
+    cloud_model: CloudModel | None = None,
     session: Session = Depends(get_session),
 ) -> RegenerateResponse:
     if session.get(DataProduct, product_id) is None:
@@ -84,9 +114,11 @@ def regenerate_ai_report(
         mode = "local_vision"
     if mode not in ALL_MODES:
         raise HTTPException(status_code=422, detail=f"unknown mode: {mode!r}")
+    if cloud_model is not None and not is_cloud_mode(mode):
+        raise HTTPException(status_code=422, detail="cloud_model requires a cloud mode")
 
     # Distinguish "feature off" / "not configured" from "worker down" for the UI.
-    settings = get_settings()
+    settings = select_cloud_model(get_settings(), cloud_model)
     if not mode_enabled(settings, mode):
         return RegenerateResponse(
             status="skipped", enqueued=False, reason=mode_disabled_reason(mode)
@@ -95,7 +127,8 @@ def regenerate_ai_report(
         return RegenerateResponse(
             status="skipped", enqueued=False, reason="cloud_not_configured"
         )
-    if enqueue_ai_report(product_id, force=True, mode=mode):
+    model_kwargs = {"cloud_model": cloud_model} if cloud_model is not None else {}
+    if enqueue_ai_report(product_id, force=True, mode=mode, **model_kwargs):
         return RegenerateResponse(status="enqueued", enqueued=True)
     return RegenerateResponse(
         status="skipped", enqueued=False, reason="queue_unavailable"
@@ -109,6 +142,7 @@ def regenerate_ai_report(
 def get_ai_cost_estimate(
     product_id: int,
     mode: str = "cloud",
+    cloud_model: CloudModel | None = None,
     session: Session = Depends(get_session),
 ) -> CostEstimateResponse:
     """Pre-run USD estimate for a cloud report, surfaced on the cloud buttons."""
@@ -118,6 +152,9 @@ def get_ai_cost_estimate(
         raise HTTPException(
             status_code=422, detail=f"cost estimate is only for cloud modes, got {mode!r}"
         )
-    if cloud_config_error(get_settings()) is not None:
+    if cloud_config_error(select_cloud_model(get_settings(), cloud_model)) is not None:
         return CostEstimateResponse(available=False, reason="cloud_not_configured")
-    return CostEstimateResponse(**estimate_cost_for_product(session, product_id, mode))
+    model_kwargs = {"cloud_model": cloud_model} if cloud_model is not None else {}
+    return CostEstimateResponse(
+        **estimate_cost_for_product(session, product_id, mode, **model_kwargs)
+    )

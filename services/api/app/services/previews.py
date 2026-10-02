@@ -92,20 +92,55 @@ def parse_s3_uri(uri: str) -> tuple[str, str]:
     return bucket, key
 
 
-def fetch_fits_anonymous(s3_uri: str, *, region: str = "us-east-1") -> bytes:
+def ensure_cloud_uri(product) -> str | None:
+    """Lazily resolve MAST-only metadata when a product is actually processed."""
+    if product.cloud_uri or not product.mast_download_uri:
+        return product.cloud_uri
+    from app.clients.mast import MastClient
+
+    try:
+        product.cloud_uri = MastClient.resolve_cloud_uri(product.mast_download_uri)
+    except Exception as exc:
+        raise PreviewError(f"MAST cloud lookup failed: {exc}", is_permanent=False) from exc
+    return product.cloud_uri
+
+
+def fetch_fits_anonymous(
+    s3_uri: str, *, region: str = "us-east-1", max_bytes: int | None = None
+) -> bytes:
     """GET the FITS file from a public AWS Open Data bucket. No AWS credentials used."""
     import boto3
     from botocore import UNSIGNED
     from botocore.config import Config
     from botocore.exceptions import BotoCoreError, ClientError
 
+    if max_bytes is None:
+        from app.config import get_settings
+
+        max_bytes = get_settings().fits_max_download_bytes
+    if max_bytes < 1:
+        raise ValueError("max_bytes must be positive")
     bucket, key = parse_s3_uri(s3_uri)
     client = boto3.client(
-        "s3", region_name=region, config=Config(signature_version=UNSIGNED)
+        "s3", region_name=region,
+        config=Config(signature_version=UNSIGNED, connect_timeout=10, read_timeout=60),
     )
     try:
         resp = client.get_object(Bucket=bucket, Key=key)
-        return resp["Body"].read()
+        body = resp["Body"]
+        try:
+            if resp.get("ContentLength", 0) > max_bytes:
+                raise PreviewError(
+                    f"FITS exceeds download limit ({max_bytes} bytes)", is_permanent=False
+                )
+            data = body.read(max_bytes + 1)
+            if len(data) > max_bytes:
+                raise PreviewError(
+                    f"FITS exceeds download limit ({max_bytes} bytes)", is_permanent=False
+                )
+            return data
+        finally:
+            body.close()
     except ClientError as e:
         code = e.response.get("Error", {}).get("Code", "")
         # 404 / NoSuchKey is permanent; file isn't going to appear.

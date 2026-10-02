@@ -2,9 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { HealthBadge } from "@/components/health-badge";
+import { CloudAiControls } from "@/components/cloud-ai-controls";
 import { RegenerateAiButton } from "@/components/regenerate-ai-button";
 import {
-  getAiCostEstimate,
+  getCloudModels,
   getProduct,
   getProductAiReports,
   getProductAnalyses,
@@ -390,13 +391,12 @@ export default async function ProductDetailPage({ params }: PageProps) {
   const productId = Number.parseInt(id, 10);
   if (!Number.isFinite(productId)) notFound();
 
-  const [productResult, analysisResult, aiReportsResult, cloudEstResult, reviewEstResult] =
+  const [productResult, analysisResult, aiReportsResult, cloudModelsResult] =
     await Promise.all([
       getProduct(productId),
       getProductAnalyses(productId),
       getProductAiReports(productId),
-      getAiCostEstimate(productId, "cloud"),
-      getAiCostEstimate(productId, "cloud_review"),
+      getCloudModels(productId),
     ]);
 
   if (!productResult.ok) {
@@ -415,14 +415,6 @@ export default async function ProductDetailPage({ params }: PageProps) {
   const aiReports = aiReportsResult.ok ? aiReportsResult.data : [];
   const localReports = aiReports.filter((r) => r.mode.startsWith("local"));
   const cloudReports = aiReports.filter((r) => r.mode.startsWith("cloud"));
-  const cloudEstimate =
-    cloudEstResult.ok && cloudEstResult.data.available
-      ? cloudEstResult.data.estimate_usd ?? null
-      : null;
-  const reviewEstimate =
-    reviewEstResult.ok && reviewEstResult.data.available
-      ? reviewEstResult.data.estimate_usd ?? null
-      : null;
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-12">
@@ -544,23 +536,17 @@ export default async function ProductDetailPage({ params }: PageProps) {
           </AiColumn>
           <AiColumn
             title="Cloud model"
-            subtitle="OpenAI / Azure · costs apply"
+            subtitle="OpenAI / Anthropic / Azure · costs apply"
             reports={cloudReports}
             emptyHint={
               <>
-                No cloud report yet. Set a provider key and{" "}
-                <code className="rounded bg-webb-deep px-1.5 py-0.5 text-xs">
-                  CLOUD_AI_ENABLE=true
-                </code>
-                , then run a cloud summary or review.
+                Choose a cloud model below to summarize the measurements or review a local report.
+                Reports from each model are saved separately for comparison.
               </>
             }
           >
-            <RegenerateAiButton productId={product.id} mode="cloud" estimateUsd={cloudEstimate} />
-            <RegenerateAiButton
-              productId={product.id}
-              mode="cloud_review"
-              estimateUsd={reviewEstimate}
+            <CloudAiControls
+              productId={product.id} models={cloudModelsResult.ok ? cloudModelsResult.data : []}
             />
           </AiColumn>
         </div>

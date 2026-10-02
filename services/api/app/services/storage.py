@@ -135,7 +135,9 @@ def local_preview_root(settings: Settings | None = None) -> Path:
     Kept as a module-level helper so the FastAPI route serving previews can
     locate the same directory without duplicating path logic.
     """
-    # Always relative to services/api/preview_cache regardless of cwd.
+    if settings and settings.preview_local_directory:
+        return Path(settings.preview_local_directory)
+    # Default relative to services/api/preview_cache regardless of cwd.
     return Path(__file__).resolve().parents[2] / "preview_cache"
 
 

@@ -40,10 +40,14 @@ export function RegenerateAiButton({
   productId,
   mode = "local",
   estimateUsd = null,
+  cloudModel,
+  disabled = false,
 }: {
   productId: number;
   mode?: string;
   estimateUsd?: number | null;
+  cloudModel?: string;
+  disabled?: boolean;
 }) {
   const router = useRouter();
   const [state, setState] = useState<ButtonState>("idle");
@@ -55,8 +59,11 @@ export function RegenerateAiButton({
     setState("loading");
     setMessage("");
     try {
-      const url = `${API_BASE}/api/products/${productId}/ai-reports/regenerate?mode=${mode}`;
+      const params = new URLSearchParams({ mode });
+      if (cloudModel && cloudModel !== "configured") params.set("cloud_model", cloudModel);
+      const url = `${API_BASE}/api/products/${productId}/ai-reports/regenerate?${params}`;
       const res = await fetch(url, { method: "POST" });
+      if (!res.ok) throw new Error(`Request failed (HTTP ${res.status}).`);
       const body = (await res.json()) as RegenerateResult;
       if (body.enqueued) {
         setState("done");
@@ -77,7 +84,7 @@ export function RegenerateAiButton({
       <button
         type="button"
         onClick={onClick}
-        disabled={state === "loading"}
+        disabled={disabled || state === "loading"}
         className="rounded border border-webb-star/20 bg-webb-deep/60 px-3 py-1.5 text-xs text-webb-star/80 hover:border-webb-accent/40 hover:text-webb-star disabled:opacity-50"
       >
         {state === "loading" ? labels.busy : labels.idle}

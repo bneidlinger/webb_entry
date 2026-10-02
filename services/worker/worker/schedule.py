@@ -19,8 +19,8 @@ from worker.config import get_settings
 log = logging.getLogger(__name__)
 
 # Stable IDs let us remove + re-add safely on restart.
-MAST_POLL_JOB_ID = "webbwatch:periodic:mast_poll"
-S3_LISTING_JOB_ID = "webbwatch:periodic:s3_listing"
+MAST_POLL_JOB_ID = "webbwatch-periodic-mast-poll"
+S3_LISTING_JOB_ID = "webbwatch-periodic-s3-listing"
 
 
 def _cancel_existing(scheduler: Scheduler, job_id: str) -> None:

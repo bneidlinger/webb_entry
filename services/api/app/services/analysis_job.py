@@ -43,6 +43,7 @@ from app.models import DataProduct, DataProductAnalysis
 from app.services.analysis import AnalysisError, Analyzer, get_analyzer_for
 from app.services.previews import (
     PreviewError,
+    ensure_cloud_uri,
     extract_calibration_metadata,
     fetch_fits_anonymous,
 )
@@ -57,7 +58,10 @@ def generate_analysis_for_product(product_id: int) -> dict:
         return _run(session, product_id)
 
 
-def _run(session: Session, product_id: int) -> dict:
+def _run(
+    session: Session, product_id: int, *, fits_data: bytes | None = None,
+    enqueue_ai: bool = True,
+) -> dict:
     product = session.get(DataProduct, product_id)
     if product is None:
         return {"product_id": product_id, "status": "skipped", "reason": "not_found"}
@@ -69,7 +73,7 @@ def _run(session: Session, product_id: int) -> dict:
             "status": "skipped",
             "reason": "unsupported_product_type",
         }
-    if not product.cloud_uri:
+    if not (product.cloud_uri or product.mast_download_uri or fits_data is not None):
         return {"product_id": product_id, "status": "skipped", "reason": "no_cloud_uri"}
 
     existing = session.scalar(
@@ -94,7 +98,12 @@ def _run(session: Session, product_id: int) -> dict:
 
     # ---- fetch FITS -----------------------------------------------------
     try:
-        fits_bytes = fetch_fits_anonymous(product.cloud_uri)
+        if fits_data is not None:
+            fits_bytes = fits_data
+        elif ensure_cloud_uri(product):
+            fits_bytes = fetch_fits_anonymous(product.cloud_uri)
+        else:
+            return {"product_id": product_id, "status": "skipped", "reason": "no_cloud_uri"}
     except PreviewError as e:
         _record_failure(session, product, analyzer, str(e), is_permanent=e.is_permanent)
         return {
@@ -146,7 +155,7 @@ def _run(session: Session, product_id: int) -> dict:
     # (AI narrates over them — it must run second). Best-effort and gated by
     # LOCAL_AI_ENABLE inside enqueue_ai_report; it never raises, so a failed
     # enqueue can't break analysis.
-    ai_enqueued = enqueue_ai_report(product.id)
+    ai_enqueued = enqueue_ai_report(product.id) if enqueue_ai else False
 
     return {
         "product_id": product_id,

@@ -19,6 +19,7 @@ import logging
 from app.config import get_settings
 from app.services.ai_modes import mode_enabled
 from app.services.analysis_types import is_analyzable
+from app.services.cloud_models import select_cloud_model
 from app.services.preview_types import is_supported
 
 log = logging.getLogger(__name__)
@@ -117,7 +118,7 @@ def enqueue_analyze_product(product_id: int, product_type: str | None = None) ->
 
 
 def enqueue_ai_report(
-    product_id: int, *, force: bool = False, mode: str = "local"
+    product_id: int, *, force: bool = False, mode: str = "local", cloud_model: str | None = None,
 ) -> bool:
     """Enqueue an AI-report job for `product_id` in `mode`. Returns True on success.
 
@@ -129,6 +130,10 @@ def enqueue_ai_report(
     path). The job layer enforces the rest of the idempotency + sequencing rules.
     """
     settings = get_settings()
+    if cloud_model is not None:
+        if not mode.startswith("cloud"):
+            raise ValueError("cloud_model is only supported for cloud modes")
+        settings = select_cloud_model(settings, cloud_model)
     if not mode_enabled(settings, mode):
         return False
 
@@ -147,6 +152,7 @@ def enqueue_ai_report(
             mode,
             job_timeout=AI_JOB_TIMEOUT,
             result_ttl=PREVIEW_RESULT_TTL,
+            **({"cloud_model": cloud_model} if cloud_model is not None else {}),
         )
     except Exception as e:  # noqa: BLE001
         log.warning("Failed to enqueue AI report for product_id=%d: %s", product_id, e)
