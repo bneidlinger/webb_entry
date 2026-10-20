@@ -6,6 +6,9 @@ The **Exoplanet Portrait Atlas** adds a second way to explore: browse 6,451 conf
 planets ranked by available data, review a sourced image prompt, and generate a
 portrait with its **Measured / Inferred / Illustrative** evidence saved alongside it.
 
+[MIT license](LICENSE) · [API vs. local generation costs](docs/COSTS.md) ·
+[Demo without API charges](#demo-without-api-charges)
+
 See [`webbwatch_ai_project_plan.md`](./webbwatch_ai_project_plan.md) for the full design plan, schema, and roadmap.
 
 ## Planet portrait showcase
@@ -32,6 +35,22 @@ separates published constraints from model interpretations and artistic choices.
 and evidence, then choose **Generate image**. Completed images appear on the planet
 page, in the ranked table, and in **Saved portraits**. See
 [generation setup](#generate-and-save-a-portrait-in-webbwatch) below.
+
+## Demo without API charges
+
+1. Start with the four portraits above and open their saved prompts and evidence.
+   This README can be shared directly without installing the app.
+2. For a local walkthrough, use the [startup instructions](#quick-start-local-dev),
+   then open `/exoplanets` and `/exoplanets/portraits/ltt-9779-b`. These curated
+   examples work without the API.
+3. Explore **Measured / Inferred / Illustrative** and follow a source publication.
+   Show which constraints come from observations and which details are artistic.
+4. With the API running, open `/exoplanets/catalog` to explore the frozen catalog
+   and inspect a planet's prompt. Browsing does not generate an image or incur
+   AI API charges. New generation is a separate, paid action.
+
+The [cost guide](docs/COSTS.md) explains our recorded roughly 2.3-cent API example,
+the costs of local generation, and what has actually been tested.
 
 ## Stack
 
@@ -171,6 +190,8 @@ The browser only receives configuration status, never the API key.
 Generation uses the [OpenAI Images API](https://developers.openai.com/api/docs/guides/image-generation),
 one 1024×1024 medium-quality PNG per request. The configured model is shown before
 generation; override it with `PORTRAIT_IMAGE_MODEL`. API usage is billed separately.
+See [running costs](docs/COSTS.md) for current rates and the recorded test estimate.
+Local image generation is not yet integrated; local report AI is a separate feature.
 This website flow is separate from the built-in imagegen tool used for curated example 002.
 Requests execute in the API background process without Redis. A database lock admits
 one active generation; request IDs prevent duplicate paid calls. Requests are never
@@ -182,3 +203,12 @@ Back up both the database and image storage: by default files are under
 `services/api/preview_cache/planet-portraits/<generation-id>/` with `image.png`, `prompt.txt`
 and `evidence.json`. The existing Azure storage adapter is used when configured.
 The generated image's scale, illumination and photometry are not independently validated.
+
+## License
+
+Original project code and documentation are released under the [MIT License](LICENSE).
+Third-party data, publications, assets, dependencies and model weights retain their
+own terms; the project license does not relicense them.
+
+When sharing a portrait, please keep its prompt, source citations, evidence categories
+and hypothetical-illustration label alongside it so viewers can assess its basis.
