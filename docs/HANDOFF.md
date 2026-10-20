@@ -2,8 +2,8 @@
 
 **Audience.** A Claude (or human engineer) opening this repo cold who needs to be production-effective inside one session. This document complements — does not replace — [`CLAUDE.md`](../CLAUDE.md) (per-session orientation) and [`webbwatch_ai_project_plan.md`](../webbwatch_ai_project_plan.md) (design source of truth). Read this once at the start of any meaningful work; it codifies *why*, *what we know*, and *what we deliberately don't*. Skim in 3 min; deep-read in 10. Length is the price of not repeating mistakes.
 
-**Last updated.** Local scale review and sample validation (2026-10-01). See section 13
-for current bounded processing and startup behavior; earlier phase notes retain history.
+**Last updated.** Catalog portrait previews (2026-10-19 Pacific), sections 15–20. See section 13
+for bounded processing and startup behavior; earlier phase notes retain history.
 
 ---
 
@@ -829,3 +829,240 @@ quality gap that schema validation alone cannot catch; the source of the target
 identity is archive metadata. Strengthen evidence checks before paid batch runs.
 This test does not establish Opus/Sol output quality. The raw report, its inputs,
 screenshots, SQLite database, and downloaded samples remain ignored local artifacts.
+
+## 15. Exoplanet Portrait Atlas prototype (2026-10-18)
+
+Design source: [project plan section 20](../webbwatch_ai_project_plan.md#20-exoplanet-portrait-atlas-2026-10-18).
+The user requested a runnable prototype as well as the roadmap addition.
+
+- `app/clients/exoplanets.py`: read-only NASA TAP `pscomppars` snapshot, count checks
+  before/after, duplicate-name rejection, 60-second request timeout and 32 MiB response
+  budget. Fetching metadata is independent of the JWST MAST/S3 ingestion path.
+- `app/services/exoplanets.py`: pure catalog scoring, shared ranks for ties, parameter
+  provenance and portrait-brief generation. No AI calls. Published spectra earn
+  presence/type credit; planned observations, calculated parameters and minimum masses
+  earn no measurement credit. Missing errors reduce parameter credit. This is an
+  availability proxy, not a validated appearance score or uncertainty probability.
+- `app/cli/exoplanets.py`: `rank --live` or `rank --catalog <snapshot>` writes all
+  rows to JSON/CSV with a manifest. `--top` affects console display only. `prompt`
+  exports the structured brief plus prompt text. Every output directory must be new.
+- `packages/shared/examples/hd189733b-appearance.json`: sourced pilot evidence separating
+  published reflectance constraints, inferred hue and illustrative cloud texture.
+  `prompt --evidence` validates planet identity and source fields; it does not automatically
+  verify scientific claims or modify catalog rankings.
+- `tests/test_exoplanets.py`: provenance/limit handling, missing data, count changes,
+  download bounds, ties, offline replay, snapshot hashes and evidence/prompt behavior.
+
+Live run on October 18 (America/Los_Angeles): **6,451 confirmed planets**, **293 with
+at least one listed spectrum**, and **79 tied at score 100**. These counts describe this
+archive snapshot, not all spectroscopy known to astronomy. The coarse top tier includes
+HD 189733 b, WASP-43 b, WASP-39 b and WASP-121 b. All rows still mark appearance as
+unassessed. Preserve ties until actual spectrum/phase-curve enrichment can distinguish
+targets. Final live artifacts are under ignored `data/exoplanets/2026-10-18-v1/`.
+
+Validation: 20 new tests pass; the complete API suite passes **296 tests** (one expected
+Astropy warning for synthetic invalid pixels), and changed Python files pass Ruff.
+The full suite needed execution outside the Windows sandbox after existing TestClient
+tests stalled inside it. A real offline replay reproduced the entire live ranking
+byte-for-byte; snapshot and portrait hashes were verified against the saved catalog.
+The HD 189733 b evidence-informed prompt is in `hd189733b-portrait/` under the final snapshot.
+
+The initial CLI milestone added no migrations, API routes, frontend pages, worker schedules,
+physical atmosphere models, or image-generation providers. Section 16 adds the first
+frontend example. Next: join published spectrum metadata and
+public observation status, reconcile parameter sets, then assess visible and infrared
+appearance separately. Keep generated imagery out of measured-preview artifacts.
+
+## 16. First portrait page and evidence panel (2026-10-18)
+
+The user supplied an image generated in ChatGPT from the exported HD 189733 b prompt
+and requested its integration into WebbWatch. The new `/exoplanets` page is linked by
+homepage navigation and a featured card.
+
+- `apps/web/public/portraits/hd-189733-b/original.png` is the user's full, unchanged
+  1254 × 1254 image. Its SHA-256 matches the supplied file. Preserve the original;
+  do not silently remove its labels or replace it with a newly generated image.
+- Adjacent `prompt.txt` and `evidence.json` are tracked public artifacts. The JSON
+  includes parameter references, uncertainty, snapshot hash and image provenance.
+  The local catalog path was removed before publication as a static asset.
+- `apps/web/lib/portraits.ts` derives displayed values and parameter citations from
+  that evidence JSON. This is a curated snapshot dated October 18, not a live API
+  query or an automatic literature review.
+- `app/exoplanets/page.tsx` displays the full image, download/prompt links and provenance.
+  `components/portrait-evidence.tsx` provides three accessible tabs: Measured, Inferred,
+  Illustrative, with arrow/Home/End keyboard navigation and linked claims. Scientific
+  claims link to papers; rendering assumptions link to the prompt and image.
+- Measured explicitly includes fitted parameters. Equilibrium temperature is Inferred;
+  cloud texture and virtual camera geometry are Illustrative. The page states that
+  the generated image's geometry has not been validated, and the generating model
+  is unknown. It never labels the output as an observation or a physical simulation.
+- The archive reference parser now accepts NASA's unquoted `href` attributes. A
+  regression test preserves the real Stassun reference format. The 21 exoplanet tests
+  and Ruff pass. The production web build includes route, TypeScript and lint checks.
+
+The page and its static assets work independently of the backend. Broader feed pages
+still require the existing API. No database/API changes or automatic generation were
+needed for this example. To add another portrait, retain its image and reproducible
+evidence bundle, then extend the curated portrait data model and UI deliberately.
+
+## 17. Ranked catalog and per-planet prompts (2026-10-18)
+
+The user requested a browsable ranking to choose the next image target and obtain its
+prompt with supporting evidence. `/exoplanets/catalog` adds a server-rendered catalog;
+`/exoplanets/catalog/[id]` provides score breakdown, source-linked Measured / Inferred /
+Illustrative tabs, copy/download prompt and evidence download. Homepage and first-portrait
+navigation link to the catalog. Filters (planet/host, discovery facility, spectrum type,
+minimum score) and pagination are encoded in the URL; ranks remain global and tied.
+
+- `app/services/exoplanet_catalog.py` loads a bundled compressed snapshot once per API
+  process, verifies SHA-256 and count, and shares `rank_catalog` / `build_portrait_brief`
+  with the CLI. IDs combine a readable name and hash, avoiding punctuation collisions.
+- `app/catalog_snapshots/exoplanets/` is tracked, approximately 660 KiB compressed.
+  The source is the previous 6,451-planet snapshot: 293 with listed spectra; 79 tied at 100.
+  UTC retrieval was October 19, 03:01 (October 18 Pacific). No live refresh is implied.
+- `exoplanets bundle --snapshot-dir ... --output-dir <new-directory> [--evidence ...]`
+  creates a deployable bundle. It verifies the source, validates the appearance planet
+  and citations, removes filesystem paths from public metadata, and refuses overwrite.
+  Review and replace the bundled files deliberately, then restart the API to clear cache.
+- `GET /api/exoplanets`: bounded search/filter/pagination; `GET /api/exoplanets/{id}`:
+  ranking, structured brief, prompt, references, uncertainties and snapshot provenance.
+  Unknown IDs return 404; unavailable/corrupt snapshots return 503. No DB/migration,
+  Redis, outbound archive request or AI call is involved in browsing.
+- Catalog pages use the existing API URL configuration and 60-second Next fetch cache.
+  Loading, empty and API-unavailable states are explicit. The original `/exoplanets`
+  image page remains independent of the backend.
+- `planet-portrait-v2` adds parameter source URLs and preserves full numeric precision.
+  The web export appends retrieval date/hash and NASA planet link. The original static
+  HD 189733 b image and prompt remain unchanged. Only that target has curated appearance
+  evidence; other prompts default to neutral gray, with unsupported details excluded.
+  Radius limits/missing data prohibit a scaled portrait; calculated radii remain model
+  inputs and are shown under Inferred, never given measurement credit.
+
+Validation includes API filters, tied ranks across pages, missing data, prompt citations,
+precision, identity isolation, safe public metadata, bundle integrity and failure paths.
+All 6,451 scores/ranks reproduce the prior saved ranking. Every detail brief was generated
+successfully: 6,393 catalog-only, one curated appearance example, 57 unsuitable for scaling.
+The production frontend build passes, all **304 API tests** pass (one expected Astropy
+warning for synthetic invalid pixels), and changed Python files pass Ruff. Browser
+checks cover catalog navigation, filtering, selection, copying, prompt download and
+evidence tab keyboard controls. The 28 catalog tests include the precision regression.
+
+## 18. LTT 9779 b: second generated portrait (2026-10-19 UTC)
+
+The user asked us to choose the best next target, gather evidence, generate its image
+and add a second example. LTT 9779 b was selected from the 79 tied score-100 planets
+for optical reflected-light evidence, JWST phase-curve asymmetry, and its TESS discovery.
+This is a curated target choice, not a scientifically calibrated reordering of the ties.
+
+- `packages/shared/examples/ltt9779b-appearance.json` separates observed/fitted constraints,
+  model interpretations and rendering assumptions. Sources include Saha et al. 2025
+  (CHEOPS albedo 0.73 ± 0.11), Coulombe et al. 2025 (JWST phase asymmetry), Borsa 2026
+  (ESPRESSO reflected light), Radica et al. 2025 (Hubble upper limit, not a detection),
+  and Stamer et al. September 2026 (cloud-composition uncertainty; preprint in review).
+  Different bandpasses/model albedos are not averaged; exact RGB remains unknown.
+- `app/catalog_snapshots/exoplanets/appearance.json` now stores two validated objects.
+  The catalog accepts a single object for backward compatibility or a list. Duplicate
+  names and absent targets are rejected; evidence is matched by exact planet identity.
+  Appearance evidence does not affect ranks, scores or archive spectrum counts.
+- `planet-portrait-v3` supports a validated, explicitly labeled field-of-view override
+  in curated evidence. LTT 9779 b uses 15° at the same 384,400 km center distance and
+  60° phase; default remains 45°. Its catalog radius 4.72 ± 0.23 Earth radii implies
+  8.9735° angular diameter, approximately 59.6% of the 15° perspective frame width.
+- Images were created with the built-in imagegen tool, followed by one imagegen
+  framing edit after the first disk looked too large. No code-based image edits or
+  paid API fallback were used. The tool's model identifier was not exposed.
+- `apps/web/public/portraits/ltt-9779-b/` retains `original.png` (selected final),
+  `generation-v1.png` (edit input), `prompt.txt`, `refinement-prompt.txt`, and evidence
+  JSON with image/parameter provenance, file hashes and the two generation stages.
+  Final image SHA-256: `a755c1f8ec1412971e29dc31b5b218edf2caba36ebefce84be06ea3bd3c62017`.
+  Visual checks cover subject, labels, exclusions and approximate framing; illumination,
+  photometry and geometry are not validated. Keep that qualification beside the image.
+- `/exoplanets/portraits/ltt-9779-b` is static and works without the API. The shared
+  portrait selector links both examples. Homepage and catalog detail link to the new
+  page; its Measured/Inferred/Illustrative panel links the actual publications and
+  retains the Hubble limit and preprint status. The first image and prompt stay unchanged.
+- Added tests for multiple-planet isolation, duplicate/absent evidence, unchanged scores,
+  saved brief consistency, default/narrower camera framing and invalid field of view.
+  All 37 targeted catalog tests, Ruff and the production web build pass. Browser checks
+  confirmed all three evidence tabs, keyboard navigation, the catalog's curated prompt
+  and the return link to portrait 002. Preview: `.cache/ltt-9779-b-webbwatch-preview.png`.
+  No new database or background jobs.
+
+## 19. Generate and retain a planet portrait in WebbWatch (2026-10-19)
+
+The catalog detail page now has a Generate image panel and recent version links.
+`/exoplanets/generated` is the paginated archive; `/exoplanets/generated/[id]` shows
+progress, the saved image, prompt, source-linked Measured/Inferred/Illustrative evidence,
+downloads and hashes. These are separate from the two preserved curated examples.
+
+- Migration `640380870d07` adds `planet_portraits`. Each request UUID is an idempotency
+  key. The database stores the exact prompt, its SHA-256, full catalog detail, evidence
+  groups and their schema version, model and generation settings before starting work.
+  Later catalog edits do not reclassify or overwrite this history. Provider-revised
+  prompts and usage, when returned, are recorded separately from the submitted prompt.
+- `POST /api/planet-portraits` accepts only a catalog ID, request UUID and prompt hash.
+  The server reconstructs the brief, rejects stale hashes and missing usable radii,
+  and never trusts user-supplied scientific claims. `GET /config`, list/detail and
+  `/image`, `/prompt`, `/evidence` routes serve configuration, history and downloads.
+- OpenAI Images API, `gpt-image-2.5-sunburst` by default, one medium-quality 1024×1024 PNG.
+  `OPENAI_API_KEY` stays server-side; `PORTRAIT_GENERATION_ENABLE` gates paid work
+  independently of cloud text reports. The UI shows model, size, quality and paid-use
+  notice before submission. No API keys are returned or raw provider errors persisted.
+  Official contract: https://developers.openai.com/api/docs/guides/image-generation
+- BackgroundTasks runs the sync job in the API process with its own DB sessions.
+  A unique nullable active-slot column permits one generation at a time across processes.
+  The worker claims queued rows conditionally; repeated request IDs never replay a call.
+  SDK retries are disabled. A lost process/request becomes interrupted after its saved
+  deadline (provider timeout plus 120 seconds), without automatic resubmission or spend.
+  This is a local prototype, not a durable distributed job queue.
+- Paid writes require development environment, a loopback client, action header and
+  an allowed Origin. Production/remote writes are disabled until authentication and
+  a durable deployment are added. CORS alone is not treated as authentication.
+- Existing local/Azure preview storage saves `planet-portraits/<uuid>/image.png`,
+  `prompt.txt` and `evidence.json`. Local default is `services/api/preview_cache/`.
+  Back up storage and DB together. Partial failures preserve the DB brief; no completed
+  image is advertised until the image and sidecar have been saved. Output bytes are
+  validated as a 1024-square PNG and hashed, not scientifically validated.
+- Most planets still use a neutral-gray scenario. No live literature enrichment,
+  physical rendering or new appearance ranking is implied by this generation feature.
+- Validation: 328 API tests pass (15 new generation cases), Ruff passes and Next's
+  production build passes. Mock-provider tests cover output persistence, snapshot
+  immutability, source/limit classification, replay, busy/expired jobs, provider and
+  storage failures, secret redaction, write gates, and paginated history.
+- Local setup: the user added their OpenAI key; access to the configured image model
+  was verified without generation. Enabled the portrait flag and replaced only the
+  sample Docker `DATABASE_URL` with the existing local SQLite database, then migrated.
+  No keys were printed. API and web servers remain on loopback ports 8000/3000.
+- With explicit user approval for one test up to $1, the actual Generate image button
+  completed LTT 9779 b generation `aa47fc61-67dc-415a-adf7-4061eea1dd3a`. The file-backed
+  saved record, image, prompt and evidence hashes were verified. Usage: 1,973 text input
+  tokens and 439 image output tokens; estimated $0.023035 at the documented rates of
+  $5/M text input and $30/M image output (not an invoice). No retries or extra images.
+  Browser checks verified progress, completion, all evidence tabs/keyboard navigation,
+  history navigation and reload persistence, with no console warnings/errors.
+  Screenshot: `.cache/portrait-generation-complete.png`.
+
+## 20. Portrait previews in the catalog (2026-10-19)
+
+- Catalog detail pages show a 256px preview above the generation controls. Polling
+  replaces it when a generation completes. The ranked table has a 64px Image column.
+  Both link to the exact saved version with its prompt and evidence, with the
+  original curated examples as fallbacks when no completed saved version exists.
+- `GET /api/planet-portraits/latest?planet_id=...` accepts up to 100 repeated IDs.
+  One window-function query selects the newest completed version for each planet
+  by creation time (ID breaks timestamp ties), without loading prompt/evidence blobs.
+  Newer failed, interrupted or active attempts do not hide an older completed image;
+  the selection is independent of history pagination.
+- `GET /api/planet-portraits/{id}/thumbnail` returns a 256px WebP derivative with
+  private 24-hour browser caching. It preserves the complete frame and aspect ratio,
+  leaving original image bytes and evidence unchanged. For the current 55 Cnc e
+  image, the derivative is 8,520 bytes versus the 1,276,123-byte original PNG.
+- Table previews use one uncached batch lookup per results page, with a bounded
+  timeout and graceful fallback. The frozen catalog still renders if the portrait
+  database is unavailable. Reading previews does not require a key or generation flag.
+- Validation: 27 focused portrait/catalog API tests pass, including version selection
+  beyond the recent-history window, query bounds, thumbnail dimensions/full frame,
+  original preservation and storage errors. Ruff and the Next production build pass.
+  Browser verification covers the 55 Cnc e preview, saved-evidence destination and
+  table thumbnail. Screenshots: `.cache/catalog-planet-preview.png` and
+  `.cache/catalog-ranked-thumbnails.png`. This change made no paid image calls.

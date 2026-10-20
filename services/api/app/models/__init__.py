@@ -5,6 +5,7 @@ from app.models.data_product import DataProduct
 from app.models.data_product_analysis import DataProductAnalysis
 from app.models.data_product_preview import DataProductPreview
 from app.models.observation import Observation
+from app.models.planet_portrait import PlanetPortrait
 from app.models.watchlist import Watchlist
 
 __all__ = [
@@ -15,5 +16,6 @@ __all__ = [
     "DataProductAnalysis",
     "DataProductPreview",
     "Observation",
+    "PlanetPortrait",
     "Watchlist",
 ]

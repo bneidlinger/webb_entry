@@ -66,6 +66,11 @@ class Settings(BaseSettings):
     openai_api_key: str | None = Field(default=None)
     openai_model: str = Field(default="gpt-4.1-mini")
 
+    # On-demand planet portraits; independent of text/report AI settings.
+    portrait_generation_enable: bool = Field(default=False)
+    portrait_image_model: str = Field(default="gpt-image-2.5-sunburst", min_length=1)
+    portrait_request_timeout_seconds: int = Field(default=600, ge=30, le=1200)
+
     # Anthropic direct (also selectable per cloud report).
     anthropic_api_key: str | None = Field(default=None)
     anthropic_model: str = Field(default="claude-opus-5-5")

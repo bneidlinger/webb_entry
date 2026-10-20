@@ -9,8 +9,10 @@ from app.routes import (
     ai_reports,
     alerts,
     analyses,
+    exoplanets,
     health,
     observations,
+    planet_portraits,
     previews,
     products,
     watchlists,
@@ -48,6 +50,8 @@ def create_app() -> FastAPI:
     app.include_router(alerts.router)
     app.include_router(webhooks.router)
     app.include_router(admin.router)
+    app.include_router(exoplanets.router)
+    app.include_router(planet_portraits.router)
     return app
 
 

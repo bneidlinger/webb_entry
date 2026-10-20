@@ -1,0 +1,22 @@
+{
+  "planet": "HD 189733 b",
+  "evidence_version": "hd189733b-visible-v1",
+  "source_checked_on": "2026-10-18",
+  "scope": "Illustrative evidence extraction from Evans et al. 2013, not an exhaustive literature review or atmospheric retrieval.",
+  "claims": [
+    {
+      "kind": "reported_constraint",
+      "text": "Hubble/STIS secondary-eclipse measurements give geometric albedo 0.40 +/- 0.12 at 290-450 nm and an upper bound of 0.12 at 450-570 nm at 1-sigma. These are broad wavelength constraints, not an RGB photograph.",
+      "source_url": "https://doi.org/10.1088/2041-8205/772/2/L16"
+    },
+    {
+      "kind": "model_inference",
+      "text": "The published best-fit reflectance suggests a deep-blue visible appearance. Reflective dayside clouds and absorption at longer wavelengths are an interpretation; exact cloud structures are unresolved.",
+      "source_url": "https://arxiv.org/abs/1307.3239"
+    },
+    {
+      "kind": "rendering_assumption",
+      "text": "Illustrate a deep-blue gas-giant atmosphere with subdued, soft cloud texture, gentle limb haze, and physically consistent spherical shading. Any mottling or broad flow-like texture is illustrative and must not be presented as measured storms. No solid surface, oceans, continents, rings, or moons. Use a black background and a planet-exposed camera. Render detailed light scattering and shading without implying resolved geographic detail."
+    }
+  ]
+}

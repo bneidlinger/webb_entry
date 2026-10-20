@@ -1,0 +1,8 @@
+{
+  "retrieved_at_utc": "2026-10-19T03:01:59.025541+00:00",
+  "catalog_sha256": "27232137ec9669171b7a76243e0f2f053127fc9b358b1bf4cba7f51f44966f43",
+  "coverage": "all_confirmed_in_archive_at_retrieval",
+  "record_count": 6451,
+  "score_version": "catalog-readiness-v1",
+  "source": "https://exoplanetarchive.ipac.caltech.edu/docs/pscp_about.html"
+}

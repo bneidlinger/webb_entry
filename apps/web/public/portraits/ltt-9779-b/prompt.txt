@@ -1,0 +1,41 @@
+Create an explicitly labeled, hypothetical illustration of LTT 9779 b. This is a catalog-based scenario, not a reconstructed photograph or physical simulation. The following numerical constraints are catalog estimates; calculated values, limits, and minimum masses are not independent measurements.
+
+Planet radius: 4.72 Earth radii; reported_with_uncertainty; uncertainties +0.23/(-0.23); limit flag 0.0. Reference: Jenkins et al. 2020; sources: https://ui.adsabs.harvard.edu/abs/2020NatAs...4.1148J/abstract.
+Planet mass: 29.32 Earth masses; reported_with_uncertainty; uncertainties +0.78/(-0.81); limit flag 0.0. Reference: Jenkins et al. 2020; sources: https://ui.adsabs.harvard.edu/abs/2020NatAs...4.1148J/abstract.
+Orbital period: 0.792052 days; reported_with_uncertainty; uncertainties +9.3e-06/(-9.3e-06); limit flag 0.0. Reference: Jenkins et al. 2020; sources: https://ui.adsabs.harvard.edu/abs/2020NatAs...4.1148J/abstract.
+Orbital semi-major axis: 0.01679 AU; reported_with_uncertainty; uncertainties +0.00014/(-0.00012); limit flag 0.0. Reference: Jenkins et al. 2020; sources: https://ui.adsabs.harvard.edu/abs/2020NatAs...4.1148J/abstract.
+Equilibrium temperature estimate: 1978.0 K; reported_with_uncertainty; uncertainties +19.0/(-19.0); limit flag 0.0. Reference: Jenkins et al. 2020; sources: https://ui.adsabs.harvard.edu/abs/2020NatAs...4.1148J/abstract.
+Host effective temperature: 5443.0 K; reported_with_uncertainty; uncertainties +14.0/(-13.0); limit flag 0.0. Reference: Jenkins et al. 2020; sources: https://ui.adsabs.harvard.edu/abs/2020NatAs...4.1148J/abstract.
+Host radius: 0.949 Solar radii; reported_with_uncertainty; uncertainties +0.006/(-0.006); limit flag 0.0. Reference: Jenkins et al. 2020; sources: https://ui.adsabs.harvard.edu/abs/2020NatAs...4.1148J/abstract.
+
+Rendering assumptions:
+Virtual camera 384400 km from planet center; this does not imply a moon or stable orbit.
+Phase angle 60 degrees; 15-degree horizontal field of view; square frame.
+Visible-light illustration with neutral display white balance; exact RGB is not measured.
+Use a neutral-gray disk unless the supplied appearance evidence supports a different hue.
+Any zoom/crop must be labeled; physical viewing distance alone does not set image scale.
+Explicit framing choice: 15-degree field of view replaces the atlas default of 45 degrees; label this narrower/wider framing and retain the viewing distance.
+Planet angular diameter: 8.9735 degrees in the stated frame.
+
+Unknowns:
+Without additional evidence, true color is unknown; exact RGB and cloud geography remain unknown.
+Surface type, continents, oceans, terrain, rings, moons and local weather patterns.
+Rotation, obliquity and spatial brightness maps unless independently sourced later.
+Equilibrium temperature is a model estimate, not measured surface temperature.
+Spectral counts do not establish detection of an atmosphere or any molecule.
+
+Supplied appearance evidence (not independently verified by this tool):
+[reported_constraint] Saha et al. (2025) analyzed 20 CHEOPS eclipses. Their DRP reduction gives an eclipse depth of 89.9 +/- 13.7 ppm and a derived geometric albedo of 0.73 +/- 0.11; an independent PIPE reduction is consistent. This is a broad optical-band result, not a literal 73% of all incident energy or a calibrated color image. Source: https://arxiv.org/abs/2506.17550
+[reported_constraint] Coulombe et al. (2025) report a 3.1-sigma asymmetric dayside reflected-light signal from a full-orbit 0.6-2.8 micrometer phase curve. The measurements constrain large-scale brightness, not resolved cloud shapes. Source: https://arxiv.org/abs/2501.14016
+[reported_constraint] Borsa (2026) reports reflected light at signal-to-noise about 5.4 with ESPRESSO, with planet-to-star flux ratio 102 (+29/-30) ppm across 380-770 nm. Enhanced blue reflectivity is reported, but the paper does not recover a detailed reflected-light spectrum or an exact visible color. Source: https://arxiv.org/abs/2606.30793
+[reported_constraint] Radica et al. (2025) did not definitively detect an eclipse with HST/WFC3 UVIS and report an injection-recovery 3-sigma upper limit of 113 ppm over 0.2-0.8 micrometers. Preserve this as a limit, not another positive detection. Source: https://arxiv.org/abs/2503.05581
+[model_inference] The JWST phase-curve model favors a brighter western dayside and a darker eastern dayside, with regional albedos 0.79 +/- 0.15 and 0.41 +/- 0.10, respectively. Reflective white clouds, plausibly silicate condensates, are a physical interpretation. These regional values are band- and model-dependent; do not equate or average them with the CHEOPS optical albedo. This is not a resolved weather map. Source: https://arxiv.org/abs/2501.14016
+[model_inference] Stamer et al. (September 2026 preprint, in review) fit combined 0.63-5.165 micrometer JWST transmission data with cloud and metallicity degeneracies. They identify mid-infrared silicate features as a needed test of cloud composition. The illustration must not present glass, titanium, metallic rain or any particular condensate as a directly observed substance. Source: https://arxiv.org/abs/2609.36206
+[rendering_assumption] Render a luminous pearl-white to very pale cool-gray atmosphere, with subtle warm-gray shading and soft, fine cloud texture. A broad brighter cloud-rich sector fading gradually into a less reflective sector is an illustrative interpretation of the large-scale asymmetry; do not label screen coordinates as a recovered longitude map. Exact RGB, cloud shapes, swirls and limb haze are illustrative. Use diffuse atmospheric reflection, never a chrome or solid-metal surface. No oceans, continents, rings, moons, lightning, sharp hurricane eyes, glass shards or glitter. No thermal false color or red glow on the nightside. Use a black, starless background. The star is outside the frame; light arrives from the upper left, with a 60-degree phase angle and approximately 75% illuminated disk area. No additional moons or objects. Source: scenario choice
+[rendering_assumption] Use the same 384400 km center-to-camera distance as the first portrait. This smaller planet is shown with an explicitly labeled 15-degree horizontal field of view instead of the atlas default 45 degrees. Its 4.72-Earth-radius catalog estimate implies an angular diameter of about 8.97 degrees and a disk diameter about 60% of a square perspective frame. Put the whole disk in frame; do not silently enlarge it. Requested geometry is not a validated simulation. Source: scenario choice
+[rendering_assumption] Create a polished square scientific illustration for WebbWatch, with the complete globe near the center and restrained white typography in the black margins. Place the title 'LTT 9779 b' at the top, followed by 'HYPOTHETICAL · EVIDENCE-INFORMED ILLUSTRATION'. At the bottom use these exact lines: '384,400 km from center · 15° horizontal field of view'; '60° phase · Narrower framing than the atlas default'; 'Cloud interpretation: model-informed · Color and texture: illustrative'; 'Hypothetical illustration — not an observed photograph.' Keep all text outside the globe, legible and uncropped. Do not add institution logos, a source watermark, a scale bar or any additional numerical claims. Source: scenario choice
+
+Do not invent detailed features as observations. Do not infer visible colors from infrared observations or a surface from equilibrium temperature. Use no rings, moons, cities, vegetation, continents, storms, or ocean textures without separately supplied evidence or an explicitly labeled scenario. Specific texture, cloud shapes, and weather must remain labeled rendering assumptions. Caption: Hypothetical illustration; detailed appearance is not observed.
+
+Evidence snapshot: 2026-10-19T03:01:59.025541+00:00. Catalog SHA-256: 27232137ec9669171b7a76243e0f2f053127fc9b358b1bf4cba7f51f44966f43.
+NASA archive: https://exoplanetarchive.ipac.caltech.edu/overview/LTT%209779%20b

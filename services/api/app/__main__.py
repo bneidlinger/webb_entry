@@ -7,12 +7,14 @@ from __future__ import annotations
 
 import typer
 
+from app.cli import exoplanets as exoplanets_cli
 from app.cli import ingest as ingest_cli
 from app.cli import sample as sample_cli
 
 app = typer.Typer(help="WebbWatch AI CLI", no_args_is_help=True)
 app.add_typer(ingest_cli.app, name="ingest", help="Data ingestion commands.")
 app.add_typer(sample_cli.app, name="sample", help="Bounded science runs and offline benchmarks.")
+app.add_typer(exoplanets_cli.app, name="exoplanets", help="Exoplanet catalog ranking and prompts.")
 
 
 if __name__ == "__main__":
