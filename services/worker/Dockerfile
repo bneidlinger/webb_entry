@@ -10,9 +10,9 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends build-essential libpq-dev \
  && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml ./
-RUN pip install --upgrade pip && pip install -e ".[dev]"
-
-COPY worker ./worker
+COPY services/api /app/api
+COPY services/worker /app/worker-service
+RUN pip install --upgrade pip && pip install /app/api /app/worker-service
+WORKDIR /app/worker-service
 
 CMD ["python", "-m", "worker.run"]

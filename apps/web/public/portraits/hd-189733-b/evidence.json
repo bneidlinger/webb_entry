@@ -1,0 +1,182 @@
+{
+  "planet": "HD 189733 b",
+  "prompt_version": "planet-portrait-v1",
+  "status": "evidence_informed_illustration",
+  "limitation": "Catalog readiness proxy, not image accuracy or probability of discovery. Spectra contents, signal quality, phase curves, and visible color have not been assessed. Composite parameters may mix publications and include calculated estimates.",
+  "parameters": [
+    {
+      "field": "pl_rade",
+      "label": "Planet radius",
+      "value": 12.66617,
+      "unit": "Earth radii",
+      "uncertainty_plus": 0.11209,
+      "uncertainty_minus": -0.11209,
+      "limit_flag": 0.0,
+      "reference": "Stassun et al. 2017",
+      "source_urls": [
+        "https://ui.adsabs.harvard.edu/abs/2017AJ....153..136S/abstract"
+      ],
+      "basis": "reported_with_uncertainty",
+      "points": 10.0,
+      "max_points": 10
+    },
+    {
+      "field": "pl_bmasse",
+      "label": "Planet mass",
+      "value": 359.1479,
+      "unit": "Earth masses",
+      "uncertainty_plus": 25.4264,
+      "uncertainty_minus": -25.4264,
+      "limit_flag": 0.0,
+      "reference": "Stassun et al. 2017",
+      "source_urls": [
+        "https://ui.adsabs.harvard.edu/abs/2017AJ....153..136S/abstract"
+      ],
+      "basis": "reported_with_uncertainty",
+      "points": 8.0,
+      "max_points": 8
+    },
+    {
+      "field": "pl_orbper",
+      "label": "Orbital period",
+      "value": 2.21857567,
+      "unit": "days",
+      "uncertainty_plus": 1.5E-07,
+      "uncertainty_minus": -1.5E-07,
+      "limit_flag": 0.0,
+      "reference": "Stassun et al. 2017",
+      "source_urls": [
+        "https://ui.adsabs.harvard.edu/abs/2017AJ....153..136S/abstract"
+      ],
+      "basis": "reported_with_uncertainty",
+      "points": 4.0,
+      "max_points": 4
+    },
+    {
+      "field": "pl_orbsmax",
+      "label": "Orbital semi-major axis",
+      "value": 0.03126,
+      "unit": "AU",
+      "uncertainty_plus": 0.00036,
+      "uncertainty_minus": -0.00036,
+      "limit_flag": 0.0,
+      "reference": "Rosenthal et al. 2021",
+      "source_urls": [
+        "https://ui.adsabs.harvard.edu/abs/2021ApJS..255....8R/abstract"
+      ],
+      "basis": "reported_with_uncertainty",
+      "points": 4.0,
+      "max_points": 4
+    },
+    {
+      "field": "pl_eqt",
+      "label": "Equilibrium temperature estimate",
+      "value": 1209.0,
+      "unit": "K",
+      "uncertainty_plus": 11.0,
+      "uncertainty_minus": -11.0,
+      "limit_flag": 0.0,
+      "reference": "Addison et al. 2019",
+      "source_urls": [
+        "https://ui.adsabs.harvard.edu/abs/2019PASP..131k5003A/abstract"
+      ],
+      "basis": "reported_with_uncertainty",
+      "points": 4.0,
+      "max_points": 4
+    },
+    {
+      "field": "st_teff",
+      "label": "Host effective temperature",
+      "value": 5052.0,
+      "unit": "K",
+      "uncertainty_plus": 16.0,
+      "uncertainty_minus": -16.0,
+      "limit_flag": 0.0,
+      "reference": "Stassun et al. 2017",
+      "source_urls": [
+        "https://ui.adsabs.harvard.edu/abs/2017AJ....153..136S/abstract"
+      ],
+      "basis": "reported_with_uncertainty",
+      "points": 6.0,
+      "max_points": 6
+    },
+    {
+      "field": "st_rad",
+      "label": "Host radius",
+      "value": 0.75,
+      "unit": "Solar radii",
+      "uncertainty_plus": 0.01,
+      "uncertainty_minus": -0.01,
+      "limit_flag": 0.0,
+      "reference": "Stassun et al. 2017",
+      "source_urls": [
+        "https://ui.adsabs.harvard.edu/abs/2017AJ....153..136S/abstract"
+      ],
+      "basis": "reported_with_uncertainty",
+      "points": 4.0,
+      "max_points": 4
+    }
+  ],
+  "mass_provenance": "Mass",
+  "appearance_evidence": {
+    "planet": "HD 189733 b",
+    "evidence_version": "hd189733b-visible-v1",
+    "source_checked_on": "2026-10-18",
+    "scope": "Illustrative evidence extraction from Evans et al. 2013, not an exhaustive literature review or atmospheric retrieval.",
+    "claims": [
+      {
+        "kind": "reported_constraint",
+        "text": "Hubble/STIS secondary-eclipse measurements give geometric albedo 0.40 +/- 0.12 at 290-450 nm and an upper bound of 0.12 at 450-570 nm at 1-sigma. These are broad wavelength constraints, not an RGB photograph.",
+        "source_url": "https://doi.org/10.1088/2041-8205/772/2/L16"
+      },
+      {
+        "kind": "model_inference",
+        "text": "The published best-fit reflectance suggests a deep-blue visible appearance. Reflective dayside clouds and absorption at longer wavelengths are an interpretation; exact cloud structures are unresolved.",
+        "source_url": "https://arxiv.org/abs/1307.3239"
+      },
+      {
+        "kind": "rendering_assumption",
+        "text": "Illustrate a deep-blue gas-giant atmosphere with subdued, soft cloud texture, gentle limb haze, and physically consistent spherical shading. Any mottling or broad flow-like texture is illustrative and must not be presented as measured storms. No solid surface, oceans, continents, rings, or moons. Use a black background and a planet-exposed camera. Render detailed light scattering and shading without implying resolved geographic detail."
+      }
+    ]
+  },
+  "appearance_evidence_automatically_verified": false,
+  "geometry": {
+    "distance_from_center_km": 384400,
+    "phase_angle_degrees": 60,
+    "horizontal_fov_degrees": 45,
+    "angular_diameter_degrees": 24.236218797198426,
+    "radius_conversion_km_per_earth_radius": 6371,
+    "radius_basis": "reported_with_uncertainty"
+  },
+  "assumptions": [
+    "Virtual camera 384400 km from planet center; this does not imply a moon or stable orbit.",
+    "Phase angle 60 degrees; 45-degree horizontal field of view; square frame.",
+    "Visible-light illustration with neutral display white balance; exact RGB is not measured.",
+    "Use a neutral-gray disk unless the supplied appearance evidence supports a different hue.",
+    "Any zoom/crop must be labeled; physical viewing distance alone does not set image scale."
+  ],
+  "unknowns": [
+    "Without additional evidence, true color is unknown; exact RGB and cloud geography remain unknown.",
+    "Surface type, continents, oceans, terrain, rings, moons and local weather patterns.",
+    "Rotation, obliquity and spatial brightness maps unless independently sourced later.",
+    "Equilibrium temperature is a model estimate, not measured surface temperature.",
+    "Spectral counts do not establish detection of an atmosphere or any molecule."
+  ],
+  "spectra_counts": {
+    "transmission": 37,
+    "eclipse": 31,
+    "direct_imaging": 0
+  },
+  "prompt": "Create an explicitly labeled, hypothetical illustration of HD 189733 b. This is a catalog-based scenario, not a reconstructed photograph or physical simulation. The following numerical constraints are catalog estimates; calculated values, limits, and minimum masses are not independent measurements.\n\nPlanet radius: 12.6662 Earth radii; reported_with_uncertainty; uncertainties +0.11209/(-0.11209); limit flag 0.0.\nPlanet mass: 359.148 Earth masses; reported_with_uncertainty; uncertainties +25.4264/(-25.4264); limit flag 0.0.\nOrbital period: 2.21858 days; reported_with_uncertainty; uncertainties +1.5e-07/(-1.5e-07); limit flag 0.0.\nOrbital semi-major axis: 0.03126 AU; reported_with_uncertainty; uncertainties +0.00036/(-0.00036); limit flag 0.0.\nEquilibrium temperature estimate: 1209 K; reported_with_uncertainty; uncertainties +11.0/(-11.0); limit flag 0.0.\nHost effective temperature: 5052 K; reported_with_uncertainty; uncertainties +16.0/(-16.0); limit flag 0.0.\nHost radius: 0.75 Solar radii; reported_with_uncertainty; uncertainties +0.01/(-0.01); limit flag 0.0.\n\nRendering assumptions:\nVirtual camera 384400 km from planet center; this does not imply a moon or stable orbit.\nPhase angle 60 degrees; 45-degree horizontal field of view; square frame.\nVisible-light illustration with neutral display white balance; exact RGB is not measured.\nUse a neutral-gray disk unless the supplied appearance evidence supports a different hue.\nAny zoom/crop must be labeled; physical viewing distance alone does not set image scale.\nPlanet angular diameter: 24.2362 degrees in the stated frame.\n\nUnknowns:\nWithout additional evidence, true color is unknown; exact RGB and cloud geography remain unknown.\nSurface type, continents, oceans, terrain, rings, moons and local weather patterns.\nRotation, obliquity and spatial brightness maps unless independently sourced later.\nEquilibrium temperature is a model estimate, not measured surface temperature.\nSpectral counts do not establish detection of an atmosphere or any molecule.\n\nSupplied appearance evidence (not independently verified by this tool):\n[reported_constraint] Hubble/STIS secondary-eclipse measurements give geometric albedo 0.40 +/- 0.12 at 290-450 nm and an upper bound of 0.12 at 450-570 nm at 1-sigma. These are broad wavelength constraints, not an RGB photograph. Source: https://doi.org/10.1088/2041-8205/772/2/L16\n[model_inference] The published best-fit reflectance suggests a deep-blue visible appearance. Reflective dayside clouds and absorption at longer wavelengths are an interpretation; exact cloud structures are unresolved. Source: https://arxiv.org/abs/1307.3239\n[rendering_assumption] Illustrate a deep-blue gas-giant atmosphere with subdued, soft cloud texture, gentle limb haze, and physically consistent spherical shading. Any mottling or broad flow-like texture is illustrative and must not be presented as measured storms. No solid surface, oceans, continents, rings, or moons. Use a black background and a planet-exposed camera. Render detailed light scattering and shading without implying resolved geographic detail. Source: scenario choice\n\nDo not invent detailed features as observations. Do not infer visible colors from infrared observations or a surface from equilibrium temperature. Use no rings, moons, cities, vegetation, continents, storms, or ocean textures without separately supplied evidence or an explicitly labeled scenario. Specific texture, cloud shapes, and weather must remain labeled rendering assumptions. Caption: Hypothetical illustration; detailed appearance is not observed.",
+  "catalog_sha256": "27232137ec9669171b7a76243e0f2f053127fc9b358b1bf4cba7f51f44966f43",
+  "source_snapshot_date": "2026-10-18",
+  "source_archive": "https://exoplanetarchive.ipac.caltech.edu/docs/pscp_about.html",
+  "image_provenance": {
+    "model": "Not recorded",
+    "creator": "Generated by the user in ChatGPT using the WebbWatch portrait prompt",
+    "original_preserved": true,
+    "geometry_validated": false,
+    "sha256": "a0525b5310baf9728c1770699e748d1116ccdd6a171b09b9706876c8a6f406f9"
+  }
+}

@@ -1,0 +1,435 @@
+{
+  "ranking": {
+    "planet": "LTT 9779 b",
+    "host": "LTT 9779",
+    "discovery_facility": "Transiting Exoplanet Survey Satellite (TESS)",
+    "score": 100.0,
+    "components": {
+      "bulk_parameters": 40.0,
+      "published_spectral_data": 40,
+      "complementary_spectrum_types": 10,
+      "thermal_spectrum_available": 10
+    },
+    "score_version": "catalog-readiness-v1",
+    "tier": "spectral_followup",
+    "spectra_counts": {
+      "transmission": 3,
+      "eclipse": 2,
+      "direct_imaging": 0
+    },
+    "jwst_approved_observation_counts": {
+      "pl_nobs_jwst_tran": 0,
+      "pl_nobs_jwst_e": 0,
+      "pl_nobs_jwst_pc": 2
+    },
+    "uncredited_parameters": [],
+    "parameter_assessment": {
+      "pl_rade": {
+        "basis": "reported_with_uncertainty",
+        "points": 10.0,
+        "max_points": 10
+      },
+      "pl_bmasse": {
+        "basis": "reported_with_uncertainty",
+        "points": 8.0,
+        "max_points": 8
+      },
+      "pl_orbper": {
+        "basis": "reported_with_uncertainty",
+        "points": 4.0,
+        "max_points": 4
+      },
+      "pl_orbsmax": {
+        "basis": "reported_with_uncertainty",
+        "points": 4.0,
+        "max_points": 4
+      },
+      "pl_eqt": {
+        "basis": "reported_with_uncertainty",
+        "points": 4.0,
+        "max_points": 4
+      },
+      "st_teff": {
+        "basis": "reported_with_uncertainty",
+        "points": 6.0,
+        "max_points": 6
+      },
+      "st_rad": {
+        "basis": "reported_with_uncertainty",
+        "points": 4.0,
+        "max_points": 4
+      }
+    },
+    "unknown_spectrum_counts": [],
+    "appearance_assessed": false,
+    "rank": 1,
+    "id": "ltt-9779-b-fa01948a50",
+    "tied_count": 79,
+    "has_curated_appearance": true
+  },
+  "brief": {
+    "planet": "LTT 9779 b",
+    "prompt_version": "planet-portrait-v3",
+    "status": "evidence_informed_illustration",
+    "limitation": "Catalog readiness proxy, not image accuracy or probability of discovery. Spectra contents, signal quality, phase curves, and visible color have not been assessed. Composite parameters may mix publications and include calculated estimates.",
+    "parameters": [
+      {
+        "field": "pl_rade",
+        "label": "Planet radius",
+        "value": 4.72,
+        "unit": "Earth radii",
+        "uncertainty_plus": 0.23,
+        "uncertainty_minus": -0.23,
+        "limit_flag": 0.0,
+        "reference": "Jenkins et al. 2020",
+        "source_urls": [
+          "https://ui.adsabs.harvard.edu/abs/2020NatAs...4.1148J/abstract"
+        ],
+        "basis": "reported_with_uncertainty",
+        "points": 10.0,
+        "max_points": 10
+      },
+      {
+        "field": "pl_bmasse",
+        "label": "Planet mass",
+        "value": 29.32,
+        "unit": "Earth masses",
+        "uncertainty_plus": 0.78,
+        "uncertainty_minus": -0.81,
+        "limit_flag": 0.0,
+        "reference": "Jenkins et al. 2020",
+        "source_urls": [
+          "https://ui.adsabs.harvard.edu/abs/2020NatAs...4.1148J/abstract"
+        ],
+        "basis": "reported_with_uncertainty",
+        "points": 8.0,
+        "max_points": 8
+      },
+      {
+        "field": "pl_orbper",
+        "label": "Orbital period",
+        "value": 0.792052,
+        "unit": "days",
+        "uncertainty_plus": 9.3e-06,
+        "uncertainty_minus": -9.3e-06,
+        "limit_flag": 0.0,
+        "reference": "Jenkins et al. 2020",
+        "source_urls": [
+          "https://ui.adsabs.harvard.edu/abs/2020NatAs...4.1148J/abstract"
+        ],
+        "basis": "reported_with_uncertainty",
+        "points": 4.0,
+        "max_points": 4
+      },
+      {
+        "field": "pl_orbsmax",
+        "label": "Orbital semi-major axis",
+        "value": 0.01679,
+        "unit": "AU",
+        "uncertainty_plus": 0.00014,
+        "uncertainty_minus": -0.00012,
+        "limit_flag": 0.0,
+        "reference": "Jenkins et al. 2020",
+        "source_urls": [
+          "https://ui.adsabs.harvard.edu/abs/2020NatAs...4.1148J/abstract"
+        ],
+        "basis": "reported_with_uncertainty",
+        "points": 4.0,
+        "max_points": 4
+      },
+      {
+        "field": "pl_eqt",
+        "label": "Equilibrium temperature estimate",
+        "value": 1978.0,
+        "unit": "K",
+        "uncertainty_plus": 19.0,
+        "uncertainty_minus": -19.0,
+        "limit_flag": 0.0,
+        "reference": "Jenkins et al. 2020",
+        "source_urls": [
+          "https://ui.adsabs.harvard.edu/abs/2020NatAs...4.1148J/abstract"
+        ],
+        "basis": "reported_with_uncertainty",
+        "points": 4.0,
+        "max_points": 4
+      },
+      {
+        "field": "st_teff",
+        "label": "Host effective temperature",
+        "value": 5443.0,
+        "unit": "K",
+        "uncertainty_plus": 14.0,
+        "uncertainty_minus": -13.0,
+        "limit_flag": 0.0,
+        "reference": "Jenkins et al. 2020",
+        "source_urls": [
+          "https://ui.adsabs.harvard.edu/abs/2020NatAs...4.1148J/abstract"
+        ],
+        "basis": "reported_with_uncertainty",
+        "points": 6.0,
+        "max_points": 6
+      },
+      {
+        "field": "st_rad",
+        "label": "Host radius",
+        "value": 0.949,
+        "unit": "Solar radii",
+        "uncertainty_plus": 0.006,
+        "uncertainty_minus": -0.006,
+        "limit_flag": 0.0,
+        "reference": "Jenkins et al. 2020",
+        "source_urls": [
+          "https://ui.adsabs.harvard.edu/abs/2020NatAs...4.1148J/abstract"
+        ],
+        "basis": "reported_with_uncertainty",
+        "points": 4.0,
+        "max_points": 4
+      }
+    ],
+    "mass_provenance": "Mass",
+    "appearance_evidence": {
+      "planet": "LTT 9779 b",
+      "evidence_version": "ltt9779b-visible-v1",
+      "source_checked_on": "2026-10-19",
+      "scope": "Targeted literature review for a hypothetical visible-light portrait. Published results are summarized, not independently re-reduced. The September 2026 transmission study is a preprint in review. Different bandpasses and model assumptions must not be averaged into one albedo or exact RGB color.",
+      "selection": {
+        "catalog_rank": 1,
+        "catalog_score": 100,
+        "top_tied_count": 79,
+        "reason": "Chosen among the top-score ties for repeated optical reflected-light measurements, JWST phase-resolved reflectance, a TESS discovery, and a useful visual contrast to the first HD 189733 b example. This is an editorial next-target choice, not a new validated ranking of appearance confidence.",
+        "compared_targets": [
+          "HD 189733 b",
+          "WASP-39 b",
+          "WASP-43 b",
+          "HD 209458 b"
+        ]
+      },
+      "rendering_horizontal_fov_degrees": 15,
+      "claims": [
+        {
+          "kind": "reported_constraint",
+          "title": "CHEOPS optical eclipses",
+          "value": "89.9 ± 13.7 ppm · geometric albedo 0.73 ± 0.11",
+          "text": "Saha et al. (2025) analyzed 20 CHEOPS eclipses. Their DRP reduction gives an eclipse depth of 89.9 +/- 13.7 ppm and a derived geometric albedo of 0.73 +/- 0.11; an independent PIPE reduction is consistent. This is a broad optical-band result, not a literal 73% of all incident energy or a calibrated color image.",
+          "source_label": "Saha et al. 2025 · CHEOPS + TESS",
+          "source_url": "https://arxiv.org/abs/2506.17550"
+        },
+        {
+          "kind": "reported_constraint",
+          "title": "JWST reflected-light asymmetry",
+          "value": "3.1σ asymmetry · full-orbit NIRISS/SOSS observations",
+          "text": "Coulombe et al. (2025) report a 3.1-sigma asymmetric dayside reflected-light signal from a full-orbit 0.6-2.8 micrometer phase curve. The measurements constrain large-scale brightness, not resolved cloud shapes.",
+          "source_label": "Coulombe et al. 2025 · JWST",
+          "source_url": "https://arxiv.org/abs/2501.14016"
+        },
+        {
+          "kind": "reported_constraint",
+          "title": "Independent reflected-light detection",
+          "value": "102 +29/−30 ppm · ESPRESSO, 380–770 nm",
+          "text": "Borsa (2026) reports reflected light at signal-to-noise about 5.4 with ESPRESSO, with planet-to-star flux ratio 102 (+29/-30) ppm across 380-770 nm. Enhanced blue reflectivity is reported, but the paper does not recover a detailed reflected-light spectrum or an exact visible color.",
+          "source_label": "Borsa 2026 · ESPRESSO",
+          "source_url": "https://arxiv.org/abs/2606.30793"
+        },
+        {
+          "kind": "reported_constraint",
+          "title": "A Hubble non-detection also matters",
+          "value": "Eclipse depth <113 ppm · 3σ, 0.2–0.8 μm",
+          "text": "Radica et al. (2025) did not definitively detect an eclipse with HST/WFC3 UVIS and report an injection-recovery 3-sigma upper limit of 113 ppm over 0.2-0.8 micrometers. Preserve this as a limit, not another positive detection.",
+          "source_label": "Radica et al. 2025 · Hubble/WFC3",
+          "source_url": "https://arxiv.org/abs/2503.05581"
+        },
+        {
+          "kind": "model_inference",
+          "title": "A brighter, cloudier western dayside",
+          "value": "Model albedos: west 0.79 ± 0.15; east 0.41 ± 0.10",
+          "text": "The JWST phase-curve model favors a brighter western dayside and a darker eastern dayside, with regional albedos 0.79 +/- 0.15 and 0.41 +/- 0.10, respectively. Reflective white clouds, plausibly silicate condensates, are a physical interpretation. These regional values are band- and model-dependent; do not equate or average them with the CHEOPS optical albedo. This is not a resolved weather map.",
+          "source_label": "Coulombe et al. 2025 · model interpretation",
+          "source_url": "https://arxiv.org/abs/2501.14016"
+        },
+        {
+          "kind": "model_inference",
+          "title": "Cloud species remain uncertain",
+          "text": "Stamer et al. (September 2026 preprint, in review) fit combined 0.63-5.165 micrometer JWST transmission data with cloud and metallicity degeneracies. They identify mid-infrared silicate features as a needed test of cloud composition. The illustration must not present glass, titanium, metallic rain or any particular condensate as a directly observed substance.",
+          "source_label": "Stamer et al. 2026 · preprint, in review",
+          "source_url": "https://arxiv.org/abs/2609.36206"
+        },
+        {
+          "kind": "rendering_assumption",
+          "title": "Reflective atmosphere, illustrative texture",
+          "text": "Render a luminous pearl-white to very pale cool-gray atmosphere, with subtle warm-gray shading and soft, fine cloud texture. A broad brighter cloud-rich sector fading gradually into a less reflective sector is an illustrative interpretation of the large-scale asymmetry; do not label screen coordinates as a recovered longitude map. Exact RGB, cloud shapes, swirls and limb haze are illustrative. Use diffuse atmospheric reflection, never a chrome or solid-metal surface. No oceans, continents, rings, moons, lightning, sharp hurricane eyes, glass shards or glitter. No thermal false color or red glow on the nightside. Use a black, starless background. The star is outside the frame; light arrives from the upper left, with a 60-degree phase angle and approximately 75% illuminated disk area. No additional moons or objects."
+        },
+        {
+          "kind": "rendering_assumption",
+          "title": "Labeled close framing",
+          "text": "Use the same 384400 km center-to-camera distance as the first portrait. This smaller planet is shown with an explicitly labeled 15-degree horizontal field of view instead of the atlas default 45 degrees. Its 4.72-Earth-radius catalog estimate implies an angular diameter of about 8.97 degrees and a disk diameter about 60% of a square perspective frame. Put the whole disk in frame; do not silently enlarge it. Requested geometry is not a validated simulation."
+        },
+        {
+          "kind": "rendering_assumption",
+          "title": "Poster layout and labels",
+          "text": "Create a polished square scientific illustration for WebbWatch, with the complete globe near the center and restrained white typography in the black margins. Place the title 'LTT 9779 b' at the top, followed by 'HYPOTHETICAL · EVIDENCE-INFORMED ILLUSTRATION'. At the bottom use these exact lines: '384,400 km from center · 15° horizontal field of view'; '60° phase · Narrower framing than the atlas default'; 'Cloud interpretation: model-informed · Color and texture: illustrative'; 'Hypothetical illustration — not an observed photograph.' Keep all text outside the globe, legible and uncropped. Do not add institution logos, a source watermark, a scale bar or any additional numerical claims."
+        }
+      ],
+      "supporting_data": [
+        {
+          "label": "Published JWST phase-curve data and models",
+          "url": "https://zenodo.org/records/14232524",
+          "access": "Repository inspected; files not reanalyzed"
+        },
+        {
+          "label": "NASA catalog parameter source: Jenkins et al. 2020",
+          "url": "https://ui.adsabs.harvard.edu/abs/2020NatAs...4.1148J/abstract",
+          "access": "Parameter values retained from the pinned NASA catalog snapshot"
+        }
+      ]
+    },
+    "appearance_evidence_automatically_verified": false,
+    "geometry": {
+      "distance_from_center_km": 384400,
+      "phase_angle_degrees": 60,
+      "horizontal_fov_degrees": 15.0,
+      "angular_diameter_degrees": 8.97351950501642,
+      "radius_conversion_km_per_earth_radius": 6371,
+      "radius_basis": "reported_with_uncertainty"
+    },
+    "assumptions": [
+      "Virtual camera 384400 km from planet center; this does not imply a moon or stable orbit.",
+      "Phase angle 60 degrees; 15-degree horizontal field of view; square frame.",
+      "Visible-light illustration with neutral display white balance; exact RGB is not measured.",
+      "Use a neutral-gray disk unless the supplied appearance evidence supports a different hue.",
+      "Any zoom/crop must be labeled; physical viewing distance alone does not set image scale.",
+      "Explicit framing choice: 15-degree field of view replaces the atlas default of 45 degrees; label this narrower/wider framing and retain the viewing distance."
+    ],
+    "unknowns": [
+      "Without additional evidence, true color is unknown; exact RGB and cloud geography remain unknown.",
+      "Surface type, continents, oceans, terrain, rings, moons and local weather patterns.",
+      "Rotation, obliquity and spatial brightness maps unless independently sourced later.",
+      "Equilibrium temperature is a model estimate, not measured surface temperature.",
+      "Spectral counts do not establish detection of an atmosphere or any molecule."
+    ],
+    "spectra_counts": {
+      "transmission": 3,
+      "eclipse": 2,
+      "direct_imaging": 0
+    },
+    "prompt": "Create an explicitly labeled, hypothetical illustration of LTT 9779 b. This is a catalog-based scenario, not a reconstructed photograph or physical simulation. The following numerical constraints are catalog estimates; calculated values, limits, and minimum masses are not independent measurements.\n\nPlanet radius: 4.72 Earth radii; reported_with_uncertainty; uncertainties +0.23/(-0.23); limit flag 0.0. Reference: Jenkins et al. 2020; sources: https://ui.adsabs.harvard.edu/abs/2020NatAs...4.1148J/abstract.\nPlanet mass: 29.32 Earth masses; reported_with_uncertainty; uncertainties +0.78/(-0.81); limit flag 0.0. Reference: Jenkins et al. 2020; sources: https://ui.adsabs.harvard.edu/abs/2020NatAs...4.1148J/abstract.\nOrbital period: 0.792052 days; reported_with_uncertainty; uncertainties +9.3e-06/(-9.3e-06); limit flag 0.0. Reference: Jenkins et al. 2020; sources: https://ui.adsabs.harvard.edu/abs/2020NatAs...4.1148J/abstract.\nOrbital semi-major axis: 0.01679 AU; reported_with_uncertainty; uncertainties +0.00014/(-0.00012); limit flag 0.0. Reference: Jenkins et al. 2020; sources: https://ui.adsabs.harvard.edu/abs/2020NatAs...4.1148J/abstract.\nEquilibrium temperature estimate: 1978.0 K; reported_with_uncertainty; uncertainties +19.0/(-19.0); limit flag 0.0. Reference: Jenkins et al. 2020; sources: https://ui.adsabs.harvard.edu/abs/2020NatAs...4.1148J/abstract.\nHost effective temperature: 5443.0 K; reported_with_uncertainty; uncertainties +14.0/(-13.0); limit flag 0.0. Reference: Jenkins et al. 2020; sources: https://ui.adsabs.harvard.edu/abs/2020NatAs...4.1148J/abstract.\nHost radius: 0.949 Solar radii; reported_with_uncertainty; uncertainties +0.006/(-0.006); limit flag 0.0. Reference: Jenkins et al. 2020; sources: https://ui.adsabs.harvard.edu/abs/2020NatAs...4.1148J/abstract.\n\nRendering assumptions:\nVirtual camera 384400 km from planet center; this does not imply a moon or stable orbit.\nPhase angle 60 degrees; 15-degree horizontal field of view; square frame.\nVisible-light illustration with neutral display white balance; exact RGB is not measured.\nUse a neutral-gray disk unless the supplied appearance evidence supports a different hue.\nAny zoom/crop must be labeled; physical viewing distance alone does not set image scale.\nExplicit framing choice: 15-degree field of view replaces the atlas default of 45 degrees; label this narrower/wider framing and retain the viewing distance.\nPlanet angular diameter: 8.9735 degrees in the stated frame.\n\nUnknowns:\nWithout additional evidence, true color is unknown; exact RGB and cloud geography remain unknown.\nSurface type, continents, oceans, terrain, rings, moons and local weather patterns.\nRotation, obliquity and spatial brightness maps unless independently sourced later.\nEquilibrium temperature is a model estimate, not measured surface temperature.\nSpectral counts do not establish detection of an atmosphere or any molecule.\n\nSupplied appearance evidence (not independently verified by this tool):\n[reported_constraint] Saha et al. (2025) analyzed 20 CHEOPS eclipses. Their DRP reduction gives an eclipse depth of 89.9 +/- 13.7 ppm and a derived geometric albedo of 0.73 +/- 0.11; an independent PIPE reduction is consistent. This is a broad optical-band result, not a literal 73% of all incident energy or a calibrated color image. Source: https://arxiv.org/abs/2506.17550\n[reported_constraint] Coulombe et al. (2025) report a 3.1-sigma asymmetric dayside reflected-light signal from a full-orbit 0.6-2.8 micrometer phase curve. The measurements constrain large-scale brightness, not resolved cloud shapes. Source: https://arxiv.org/abs/2501.14016\n[reported_constraint] Borsa (2026) reports reflected light at signal-to-noise about 5.4 with ESPRESSO, with planet-to-star flux ratio 102 (+29/-30) ppm across 380-770 nm. Enhanced blue reflectivity is reported, but the paper does not recover a detailed reflected-light spectrum or an exact visible color. Source: https://arxiv.org/abs/2606.30793\n[reported_constraint] Radica et al. (2025) did not definitively detect an eclipse with HST/WFC3 UVIS and report an injection-recovery 3-sigma upper limit of 113 ppm over 0.2-0.8 micrometers. Preserve this as a limit, not another positive detection. Source: https://arxiv.org/abs/2503.05581\n[model_inference] The JWST phase-curve model favors a brighter western dayside and a darker eastern dayside, with regional albedos 0.79 +/- 0.15 and 0.41 +/- 0.10, respectively. Reflective white clouds, plausibly silicate condensates, are a physical interpretation. These regional values are band- and model-dependent; do not equate or average them with the CHEOPS optical albedo. This is not a resolved weather map. Source: https://arxiv.org/abs/2501.14016\n[model_inference] Stamer et al. (September 2026 preprint, in review) fit combined 0.63-5.165 micrometer JWST transmission data with cloud and metallicity degeneracies. They identify mid-infrared silicate features as a needed test of cloud composition. The illustration must not present glass, titanium, metallic rain or any particular condensate as a directly observed substance. Source: https://arxiv.org/abs/2609.36206\n[rendering_assumption] Render a luminous pearl-white to very pale cool-gray atmosphere, with subtle warm-gray shading and soft, fine cloud texture. A broad brighter cloud-rich sector fading gradually into a less reflective sector is an illustrative interpretation of the large-scale asymmetry; do not label screen coordinates as a recovered longitude map. Exact RGB, cloud shapes, swirls and limb haze are illustrative. Use diffuse atmospheric reflection, never a chrome or solid-metal surface. No oceans, continents, rings, moons, lightning, sharp hurricane eyes, glass shards or glitter. No thermal false color or red glow on the nightside. Use a black, starless background. The star is outside the frame; light arrives from the upper left, with a 60-degree phase angle and approximately 75% illuminated disk area. No additional moons or objects. Source: scenario choice\n[rendering_assumption] Use the same 384400 km center-to-camera distance as the first portrait. This smaller planet is shown with an explicitly labeled 15-degree horizontal field of view instead of the atlas default 45 degrees. Its 4.72-Earth-radius catalog estimate implies an angular diameter of about 8.97 degrees and a disk diameter about 60% of a square perspective frame. Put the whole disk in frame; do not silently enlarge it. Requested geometry is not a validated simulation. Source: scenario choice\n[rendering_assumption] Create a polished square scientific illustration for WebbWatch, with the complete globe near the center and restrained white typography in the black margins. Place the title 'LTT 9779 b' at the top, followed by 'HYPOTHETICAL · EVIDENCE-INFORMED ILLUSTRATION'. At the bottom use these exact lines: '384,400 km from center · 15° horizontal field of view'; '60° phase · Narrower framing than the atlas default'; 'Cloud interpretation: model-informed · Color and texture: illustrative'; 'Hypothetical illustration — not an observed photograph.' Keep all text outside the globe, legible and uncropped. Do not add institution logos, a source watermark, a scale bar or any additional numerical claims. Source: scenario choice\n\nDo not invent detailed features as observations. Do not infer visible colors from infrared observations or a surface from equilibrium temperature. Use no rings, moons, cities, vegetation, continents, storms, or ocean textures without separately supplied evidence or an explicitly labeled scenario. Specific texture, cloud shapes, and weather must remain labeled rendering assumptions. Caption: Hypothetical illustration; detailed appearance is not observed.\n\nEvidence snapshot: 2026-10-19T03:01:59.025541+00:00. Catalog SHA-256: 27232137ec9669171b7a76243e0f2f053127fc9b358b1bf4cba7f51f44966f43.\nNASA archive: https://exoplanetarchive.ipac.caltech.edu/overview/LTT%209779%20b\n",
+    "catalog_sha256": "27232137ec9669171b7a76243e0f2f053127fc9b358b1bf4cba7f51f44966f43",
+    "retrieved_at_utc": "2026-10-19T03:01:59.025541+00:00",
+    "archive_url": "https://exoplanetarchive.ipac.caltech.edu/overview/LTT%209779%20b"
+  },
+  "snapshot": {
+    "retrieved_at_utc": "2026-10-19T03:01:59.025541+00:00",
+    "catalog_sha256": "27232137ec9669171b7a76243e0f2f053127fc9b358b1bf4cba7f51f44966f43",
+    "coverage": "all_confirmed_in_archive_at_retrieval",
+    "record_count": 6451,
+    "source": "https://exoplanetarchive.ipac.caltech.edu/docs/pscp_about.html",
+    "score_version": "catalog-readiness-v1",
+    "limitation": "Catalog readiness proxy, not image accuracy or probability of discovery. Spectra contents, signal quality, phase curves, and visible color have not been assessed. Composite parameters may mix publications and include calculated estimates.",
+    "with_spectra": 293,
+    "top_score": 100.0,
+    "top_tied_count": 79,
+    "facilities": [
+      "Acton Sky Portal Observatory",
+      "Anglo-Australian Telescope",
+      "Apache Point Observatory",
+      "Arecibo Observatory",
+      "Atacama Large Millimeter Array (ALMA)",
+      "Bohyunsan Optical Astronomical Observatory",
+      "CHaracterising ExOPlanets Satellite (CHEOPS)",
+      "Calar Alto Observatory",
+      "Cerro Tololo Inter-American Observatory",
+      "CoRoT",
+      "European Southern Observatory",
+      "European Space Agency (ESA) Gaia Satellite",
+      "Fred Lawrence Whipple Observatory",
+      "Gemini Observatory",
+      "HATNet",
+      "HATSouth",
+      "Haleakala Observatory",
+      "Haute-Provence Observatory",
+      "Hubble Space Telescope",
+      "Infrared Survey Facility",
+      "James Webb Space Telescope (JWST)",
+      "K2",
+      "KELT",
+      "KELT-North",
+      "KELT-South",
+      "KMTNet",
+      "KOINet",
+      "Kepler",
+      "Kitt Peak National Observatory",
+      "La Silla Observatory",
+      "Large Binocular Telescope Observatory",
+      "Las Campanas Observatory",
+      "Leoncito Astronomical Complex",
+      "Lick Observatory",
+      "Lowell Observatory",
+      "MEarth Project",
+      "MOA",
+      "Mauna Kea Observatory",
+      "McDonald Observatory",
+      "Multiple Facilities",
+      "Multiple Observatories",
+      "NASA Infrared Telescope Facility (IRTF)",
+      "Next-Generation Transit Survey (NGTS)",
+      "OGLE",
+      "Okayama Astrophysical Observatory",
+      "Palomar Observatory",
+      "Paranal Observatory",
+      "Parkes Observatory",
+      "Qatar",
+      "Roque de los Muchachos Observatory",
+      "SPECULOOS Southern Observatory",
+      "South African Radio Astronomy Observatory (SARAO)",
+      "Spitzer Space Telescope",
+      "Subaru Telescope",
+      "SuperWASP",
+      "SuperWASP-North",
+      "SuperWASP-South",
+      "Teide Observatory",
+      "The 2 (Two) Micron All Sky Survey (2MASS)",
+      "Thueringer Landessternwarte Tautenburg",
+      "TrES",
+      "Transiting Exoplanet Survey Satellite (TESS)",
+      "United Kingdom Infrared Telescope",
+      "University of Canterbury Mt John Observatory",
+      "Very Long Baseline Array",
+      "W. M. Keck Observatory",
+      "WASP-South",
+      "Wide-field Infrared Survey Explorer (WISE) Satellite Mission",
+      "Winer Observatory",
+      "XO",
+      "Xinglong Station",
+      "Yunnan Astronomical Observatory",
+      "Zwicky Transient Facility"
+    ]
+  },
+  "image_provenance": {
+    "creator": "Generated in Codex with the built-in imagegen tool",
+    "model": "Not exposed by the tool",
+    "generated_at_utc": "2026-10-19T04:34:46.365631+00:00",
+    "width": 1254,
+    "height": 1254,
+    "geometry_validated": false,
+    "review": "Visual review: subject, labels and exclusions checked. One framing refinement reduced an oversized disk. Geometry, illumination and photometry are not independently validated; exact color and cloud texture remain illustrative.",
+    "expected_disk_fraction_of_frame_width": 0.5960327015290442,
+    "stages": [
+      {
+        "image": "generation-v1.png",
+        "prompt": "prompt.txt",
+        "role": "Initial generation"
+      },
+      {
+        "image": "original.png",
+        "prompt": "refinement-prompt.txt",
+        "input_image": "generation-v1.png",
+        "role": "Selected final; framing refinement"
+      }
+    ],
+    "file_sha256": {
+      "generation-v1.png": "298ff27cf2514e448152cce461d5c34aa32097b02723869e2bccef9ac66995f8",
+      "original.png": "a755c1f8ec1412971e29dc31b5b218edf2caba36ebefce84be06ea3bd3c62017",
+      "prompt.txt": "ae3837cfe181413b06dc1b2223e9abd531127f7cd149111428ef4997a98245bb",
+      "refinement-prompt.txt": "09488ef58d2a9840836ff03e3e797412f827edf3f4d1ea87e0fb2f03dc54d55b"
+    }
+  }
+}

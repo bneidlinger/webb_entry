@@ -2,7 +2,16 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { HealthBadge } from "@/components/health-badge";
-import { getProduct, getProductAnalyses, type AnalysisRead } from "@/lib/api";
+import { CloudAiControls } from "@/components/cloud-ai-controls";
+import { RegenerateAiButton } from "@/components/regenerate-ai-button";
+import {
+  getCloudModels,
+  getProduct,
+  getProductAiReports,
+  getProductAnalyses,
+  type AiReportRead,
+  type AnalysisRead,
+} from "@/lib/api";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -184,15 +193,211 @@ function AnalysisCard({ a }: { a: AnalysisRead }) {
   );
 }
 
+function confidenceClass(c: string): string {
+  if (c === "high") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-200";
+  if (c === "medium") return "border-amber-500/30 bg-amber-500/10 text-amber-200";
+  return "border-webb-star/20 bg-webb-deep/40 text-webb-star/70";
+}
+
+function severityClass(s: string): string {
+  if (s === "critical") return "border-red-500/30 bg-red-500/5 text-red-200";
+  if (s === "warning") return "border-amber-500/30 bg-amber-500/5 text-amber-200";
+  return "border-sky-500/30 bg-sky-500/5 text-sky-200";
+}
+
+function modeChip(mode: string): { label: string; className: string } | null {
+  if (mode === "local_vision")
+    return { label: "vision", className: "border-violet-400/40 bg-violet-400/10 text-violet-200" };
+  if (mode === "cloud")
+    return { label: "cloud", className: "border-cyan-400/40 bg-cyan-400/10 text-cyan-200" };
+  if (mode === "cloud_review")
+    return { label: "review", className: "border-amber-400/40 bg-amber-400/10 text-amber-200" };
+  return null; // local → no chip (it's the default)
+}
+
+function AiReportCard({ r }: { r: AiReportRead }) {
+  const report = r.report_json;
+  const chip = modeChip(r.mode);
+  return (
+    <div className="rounded-lg border border-webb-accent/20 bg-webb-ink/40 p-5">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="rounded border border-webb-accent/40 bg-webb-accent/10 px-2 py-0.5 text-xs uppercase tracking-wider text-webb-accent">
+            AI-generated
+          </span>
+          {chip && (
+            <span
+              className={`rounded border px-2 py-0.5 text-xs uppercase tracking-wider ${chip.className}`}
+            >
+              {chip.label}
+            </span>
+          )}
+          <span className="font-mono text-xs text-webb-star/50">
+            {r.model_name} · {r.prompt_version}
+            {r.cost_estimate != null && ` · $${r.cost_estimate.toFixed(4)}`}
+          </span>
+        </div>
+        <span className="text-xs text-webb-star/40">{formatDate(r.generated_at)}</span>
+      </div>
+
+      {r.is_permanent_failure ? (
+        <div className="rounded border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-200">
+          Generation failed: {r.last_error ?? "unknown"}
+        </div>
+      ) : !report ? (
+        <div className="rounded border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-200">
+          Pending or retrying{r.last_error ? `: ${r.last_error}` : ""}.
+        </div>
+      ) : (
+        <div className="space-y-5">
+          <p className="text-sm leading-relaxed text-webb-star/90">{report.summary}</p>
+
+          {report.tags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {report.tags.map((t) => (
+                <span
+                  key={t}
+                  className="rounded-full border border-webb-star/15 bg-webb-deep/50 px-2 py-0.5 text-xs text-webb-star/70"
+                >
+                  #{t}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {report.measured_facts.length > 0 && (
+            <section>
+              <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-webb-accent">
+                Measured facts
+              </h3>
+              <dl>
+                {report.measured_facts.map((f, i) => (
+                  <div
+                    key={i}
+                    className="flex items-baseline justify-between gap-4 border-b border-webb-star/5 py-1.5 last:border-b-0"
+                  >
+                    <dt className="text-xs text-webb-star/60">
+                      {f.name} <span className="text-webb-star/30">({f.source})</span>
+                    </dt>
+                    <dd className="font-mono text-sm text-webb-star/90">{f.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          )}
+
+          {report.interesting_features.length > 0 && (
+            <section>
+              <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-webb-accent">
+                Interesting features
+              </h3>
+              <ul className="space-y-2">
+                {report.interesting_features.map((f, i) => (
+                  <li key={i} className="rounded border border-webb-star/10 bg-webb-deep/30 p-3 text-sm">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="text-webb-star/90">{f.feature}</span>
+                      <span
+                        className={`shrink-0 rounded border px-1.5 py-0.5 text-xs uppercase ${confidenceClass(f.confidence)}`}
+                      >
+                        {f.confidence}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-webb-star/50">{f.evidence}</p>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {report.quality_flags.length > 0 && (
+            <section>
+              <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-webb-accent">
+                Quality flags
+              </h3>
+              <ul className="space-y-2">
+                {report.quality_flags.map((f, i) => (
+                  <li key={i} className={`rounded border p-3 text-sm ${severityClass(f.severity)}`}>
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span>{f.flag}</span>
+                      <span className="shrink-0 text-xs uppercase opacity-70">{f.severity}</span>
+                    </div>
+                    {f.details && <p className="mt-1 text-xs opacity-80">{f.details}</p>}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {report.recommended_next_steps.length > 0 && (
+            <section>
+              <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-webb-accent">
+                Recommended next steps
+              </h3>
+              <ul className="list-disc space-y-1 pl-5 text-sm text-webb-star/80">
+                {report.recommended_next_steps.map((s, i) => (
+                  <li key={i}>{s}</li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          <p className="rounded border border-webb-star/15 bg-webb-deep/40 p-3 text-xs text-webb-star/50">
+            AI interpretation — hypothesis-generating, not confirmation.
+            {report.human_validation_required ? " Human validation required." : ""}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AiColumn({
+  title,
+  subtitle,
+  reports,
+  emptyHint,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  reports: AiReportRead[];
+  emptyHint: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <div className="mb-2 flex items-baseline justify-between">
+        <h3 className="text-sm font-medium uppercase tracking-wider text-webb-accent">{title}</h3>
+        <span className="text-xs text-webb-star/40">{subtitle}</span>
+      </div>
+      {reports.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-webb-star/20 bg-webb-ink/40 p-5 text-sm text-webb-star/60">
+          {emptyHint}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {reports.map((r) => (
+            <AiReportCard key={r.id} r={r} />
+          ))}
+        </div>
+      )}
+      <div className="mt-4 flex flex-wrap gap-3">{children}</div>
+    </div>
+  );
+}
+
 export default async function ProductDetailPage({ params }: PageProps) {
   const { id } = await params;
   const productId = Number.parseInt(id, 10);
   if (!Number.isFinite(productId)) notFound();
 
-  const [productResult, analysisResult] = await Promise.all([
-    getProduct(productId),
-    getProductAnalyses(productId),
-  ]);
+  const [productResult, analysisResult, aiReportsResult, cloudModelsResult] =
+    await Promise.all([
+      getProduct(productId),
+      getProductAnalyses(productId),
+      getProductAiReports(productId),
+      getCloudModels(productId),
+    ]);
 
   if (!productResult.ok) {
     if (productResult.error.includes("404")) notFound();
@@ -207,6 +412,9 @@ export default async function ProductDetailPage({ params }: PageProps) {
 
   const product = productResult.data;
   const analyses = analysisResult.ok ? analysisResult.data : [];
+  const aiReports = aiReportsResult.ok ? aiReportsResult.data : [];
+  const localReports = aiReports.filter((r) => r.mode.startsWith("local"));
+  const cloudReports = aiReports.filter((r) => r.mode.startsWith("cloud"));
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-12">
@@ -301,6 +509,47 @@ export default async function ProductDetailPage({ params }: PageProps) {
             ))}
           </div>
         )}
+      </section>
+
+      <section className="mt-8">
+        <div className="mb-3 flex items-baseline justify-between">
+          <h2 className="text-lg font-medium text-webb-star/90">AI interpretation</h2>
+          <span className="text-xs text-webb-star/40">local + cloud · hypothesis-generating</span>
+        </div>
+        <div className="grid gap-6 lg:grid-cols-2">
+          <AiColumn
+            title="Local model"
+            subtitle="free · on your machine"
+            reports={localReports}
+            emptyHint={
+              <>
+                No local summary yet. Install Ollama, pull a model, and set{" "}
+                <code className="rounded bg-webb-deep px-1.5 py-0.5 text-xs">
+                  LOCAL_AI_ENABLE=true
+                </code>
+                .
+              </>
+            }
+          >
+            <RegenerateAiButton productId={product.id} mode="local" />
+            <RegenerateAiButton productId={product.id} mode="local_vision" />
+          </AiColumn>
+          <AiColumn
+            title="Cloud model"
+            subtitle="OpenAI / Anthropic / Azure · costs apply"
+            reports={cloudReports}
+            emptyHint={
+              <>
+                Choose a cloud model below to summarize the measurements or review a local report.
+                Reports from each model are saved separately for comparison.
+              </>
+            }
+          >
+            <CloudAiControls
+              productId={product.id} models={cloudModelsResult.ok ? cloudModelsResult.data : []}
+            />
+          </AiColumn>
+        </div>
       </section>
     </main>
   );

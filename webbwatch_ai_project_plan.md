@@ -7,6 +7,12 @@
 > **Amendment 2026-05-17 — Azure pivot.**
 > The cloud target is now **Microsoft Azure** for our own infrastructure (object storage, compute, database, cache, cloud AI). The JWST public data itself remains on AWS (`s3://stpubdata/jwst`) because STScI hosts it there — we read it anonymously and store only derived artifacts (previews, FITS cache, analysis outputs) in Azure. Cloud AI supports both **OpenAI** and **Azure OpenAI** behind a provider interface (`AI_PROVIDER=openai|azure_openai`). Affected sections: §2 (stack), §3 (sources), §6 (AI), §11 (phases).
 
+> **Amendment 2026-10-18 — Exoplanet Portrait Atlas.** Expand the discovery workflow
+> to combine TESS and other exoplanet observations, rank confirmed planets by usable
+> evidence, and produce sourced prompts for hypothetical close-range views. Section 20
+> defines the track and distinguishes the runnable catalog prototype from future
+> atmosphere modeling and image generation.
+
 ---
 
 ## 1. Product Vision
@@ -857,6 +863,10 @@ Deliverable:
 
 ## 12. “Cool Factor” Features
 
+The **Exoplanet Portrait Atlas** in section 20 is an additional product track alongside
+the feed and deployment phases. Its first milestone is catalog ranking and evidence
+briefs; detailed scientific modeling and image generation follow separately.
+
 These are not MVP, but they are what make the project popular.
 
 ### Discovery cards
@@ -1078,3 +1088,203 @@ These were used to shape the plan:
 ## 19. One-Sentence Build Strategy
 
 Build a Python-powered JWST ingestion and FITS-analysis backend, wrap it in a slick Next.js public feed, then add local AI for cheap first-pass interpretation and OpenAI for optional “skeptical cosmic reviewer” mode.
+
+---
+
+## 20. Exoplanet Portrait Atlas (2026-10-18)
+
+### 20.1 Goal and scientific contract
+
+Start with every confirmed planet in the NASA Exoplanet Archive, combine evidence
+across missions, and identify which worlds support the most informative simulated
+view from approximately the Earth-Moon distance. Every portrait should expose its
+observations, physical interpretations, rendering assumptions, and remaining unknowns.
+High pixel resolution must never be presented as high observational resolution.
+
+A text-to-image output is an **evidence-informed illustration**. A **physical simulation**
+requires an explicit atmosphere/radiative-transfer model, its parameters, and comparisons
+to measured observables. Detailed continents, oceans, weather, or surface geography
+cannot be recovered merely by writing a longer prompt. Produce multiple plausible
+scenarios where the data allow competing interpretations; image-generation seeds alone
+are not scientific uncertainty samples.
+
+"All known" means all confirmed objects in the chosen archive at a recorded snapshot
+time. Keep TESS/Kepler candidates separate with their confirmation status; preserve
+disputed/removed entries in snapshot history. A missing catalog spectrum does not prove
+that no observation exists elsewhere.
+
+### 20.2 Source integration
+
+| Source | Contribution | Handling |
+|---|---|---|
+| NASA Exoplanet Archive `pscomppars` | One row per confirmed planet, system parameters and references | Starting census and availability triage; retain errors, limits and calculated-value provenance |
+| Archive `ps` | Parameter sets associated with individual publications | Reconcile consistent parameters for physical models instead of blindly mixing composite values |
+| TESS and Kepler/K2 light curves | Transit/orbit constraints and, where measurable, phase/eclipsing signals | Match aliases and host components; discovery facility is not a complete observation history |
+| Archive `spectra` | Published transmission, eclipse and direct-imaging spectra across facilities | Inspect wavelength coverage, uncertainty, calibration and reductions; count independent observations separately |
+| Hubble, JWST, Spitzer and ground-based follow-up | Atmospheric, thermal, reflectance and mass constraints | Link the underlying products and papers; qualify planet-specific versus host-only evidence |
+| NExoList / MAST | JWST atmospheric program metadata, dates and public-product availability | Approved/planned programs earn no existing-data credit; distinguish observed, public and usable |
+
+The archive warns that composite rows can mix publications and calculated estimates.
+Use those rows for discovery, then resolve provenance before modeling.
+[Composite-table documentation](https://exoplanetarchive.ipac.caltech.edu/docs/pscp_about.html).
+
+The current spectroscopy interface includes transmission, eclipse and direct-imaging
+data; alternative reductions of one observation can appear separately.
+[Atmospheric spectroscopy documentation](https://exoplanetarchive.ipac.caltech.edu/docs/atmospheres/atmospheres_home.html).
+NExoList includes both archived and planned JWST programs.
+[JWST archive holdings](https://exoplanetarchive.ipac.caltech.edu/docs/JWSTMission.html).
+
+### 20.3 Runnable milestone: catalog readiness proxy
+
+Implemented as `python -m app exoplanets rank` and `python -m app exoplanets prompt`.
+The catalog milestone is a CLI prototype, with no database migration, scheduled job,
+atmosphere retrieval, image-generation call, or automatic AI spend. A subsequent UI
+milestone adds `/exoplanets`: the user's original HD 189733 b image, a Measured / Inferred /
+Illustrative panel with linked evidence, and downloads for the original image, prompt
+and provenance. This first curated example works independently of the API.
+
+`catalog-readiness-v1` is a transparent prioritization heuristic, not a scientific
+confidence percentage. Its components are:
+
+| Component | Maximum points |
+|---|---:|
+| Radius / true mass | 10 / 8 |
+| Period / semi-major axis / equilibrium-temperature estimate | 4 / 4 / 4 |
+| Host effective temperature / radius | 6 / 4 |
+| At least one published spectrum of any supported type | 40 |
+| At least two different spectrum types | 10 |
+| Eclipse or direct-imaging spectrum available | 10 |
+
+Parameter credit requires a positive finite value, a publication reference, and no
+limit-only or archive-calculated flag. The mass field must identify true mass, not
+`Msini` or a model estimate. Parameters with valid two-sided nonzero errors receive
+full points; those lacking them receive half. This checks uncertainty availability,
+not its magnitude or a publication's reliability. Equilibrium temperature remains a
+model estimate even when published with errors.
+
+Spectra contribute presence/type credit, never points proportional to bins, files,
+papers, or repeated reductions. This does not assess S/N, wavelength coverage, species,
+visible color, spatial information, or independent replication. A spectrum may contain
+an upper limit or no atmospheric detection. Unknown counts remain explicitly unknown.
+Approved JWST observation counts are retained for future follow-up but score zero.
+All rows retain `appearance_assessed=false`.
+
+Sort by score descending, assign shared ranks to equal scores, and sort tied names
+alphabetically for display. Do not imply that the first alphabetical entry is the best
+scientific target. Preserve all planets, including those with insufficient evidence.
+
+Live snapshots check archive counts before and after retrieval, validate unique planet
+names, and fail on truncation/count changes. Requests have timeouts and a 32 MiB response
+budget. The manifest records query, timestamp, hashes, coverage and scoring version;
+count checks do not guarantee a transactionally frozen archive. Local replay does not
+claim current archive completeness. A new output directory is required for each run.
+
+From `services/api`:
+
+```powershell
+.\.venv\Scripts\python.exe -m app exoplanets rank --live --output-dir ../../data/exoplanets/my-snapshot
+.\.venv\Scripts\python.exe -m app exoplanets rank --catalog ../../data/exoplanets/my-snapshot/catalog.json --output-dir ../../data/exoplanets/my-replay
+.\.venv\Scripts\python.exe -m app exoplanets prompt --catalog ../../data/exoplanets/my-snapshot/catalog.json --planet "HD 189733 b" --evidence ../../packages/shared/examples/hd189733b-appearance.json --output-dir ../../data/exoplanets/my-portrait
+```
+
+Ranking exports: `catalog.json`, `manifest.json`, `ranking.json` (score explanations),
+and `ranking.csv` (sortable summary). Prompt exports: `brief.json` and `prompt.txt`.
+Omitting `--evidence` produces a conservative bulk-parameter brief. Optional evidence
+requires the matching planet, explicit claim kinds, and source URLs for scientific
+claims; the CLI validates structure, not the truth or currency of those claims.
+
+The HD 189733 b example separates published albedo constraints, a model-supported blue
+hue, and invented cloud texture. The source concerns broad wavelength reflectance,
+not resolved weather or a precise RGB image.
+[Evans et al. (2013)](https://arxiv.org/abs/1307.3239).
+
+### 20.4 Next milestone: rank actual appearance constraints
+
+Enrich the shortlist with spectrum metadata and published analyses before assigning an
+appearance-readiness score. Store each constraint with its value/distribution, unit,
+wavelength band, epoch, uncertainty or upper limit, paper/product identifier, reduction
+version and relationship to other reductions of the same observation.
+
+Maintain separate visible-light and thermal/infrared rankings. Infrared molecular
+features and thermal maps do not directly determine visible colors. Evaluate:
+
+1. Bulk geometry and illumination, with physically consistent parameter sets.
+2. Atmospheric composition and cloud/haze constraints, including retrieval degeneracy.
+3. Temperature structure, phase coverage and evidence for spatial brightness variation.
+4. Visible reflectance/albedo constraints for visible portraits; emission constraints
+   for explicitly labeled infrared maps.
+5. Measurement quality, independent replication, conflicting results and source coverage.
+
+Version scoring weights and calibrate them against a reviewed pilot set. Display
+unsearched sources separately from searched-but-empty sources; incomplete enrichment
+must not become a confident "no data" claim. Keep the scientific interest/follow-up
+priority separate from appearance readiness so well-studied hot giants do not obscure
+unusual or less-studied worlds. TSM/ESM can inform future observing opportunities, not
+replace evidence already obtained.
+
+Useful pilots, not an asserted complete ranking:
+
+- **HD 189733 b:** visible reflectance and atmospheric work; the supplied prompt example.
+- **WASP-43 b:** phase-curve temperature constraints and model-dependent cloud/weather
+  interpretations. [NASA's Webb study summary](https://science.nasa.gov/missions/webb/nasas-webb-maps-weather-on-planet-280-light-years-away/).
+- **WASP-39 b:** atmospheric spectroscopy and chemistry as a test of translating
+  composition constraints without inventing geography.
+  [NASA's atmospheric study summary](https://science.nasa.gov/missions/webb/nasas-webb-reveals-an-exoplanet-atmosphere-as-never-seen-before/).
+
+### 20.5 Prompt and rendering contract
+
+The structured brief is the source of truth; the prose prompt is an export. Separate
+reported constraints, model inferences and rendering assumptions. Retain the source
+snapshot hash, prompt/model versions, parameter provenance and unknowns beside the image.
+
+Default camera: **384,400 km from the planet's center**, phase angle 60 degrees, horizontal
+field of view 45 degrees, square frame. Compute angular diameter as `2 asin(R / d)`;
+at this distance an Earth-radius object spans about 1.9 degrees. A close crop is allowed
+only with its changed field of view labeled. This is a virtual viewpoint, not a claim
+that a stable moon orbit exists there. Reject missing/limit-only radii for scaled views;
+calculated radii, when used, remain explicit scenario inputs.
+
+For detailed visualizations, render disk geometry and illumination deterministically,
+then use physical models for permitted appearance ranges. AI can supply illustrative
+texture within those ranges. Preserve the geometry reference and inspect the generated
+result for violations; a prompt alone cannot guarantee numerical fidelity. Label
+infrared false color, artistic crops and invented texture. Show alternative physical
+scenarios side by side, without assigning probabilities unless a calibrated inference
+model actually supplied them.
+
+### 20.6 Discovery loop and WebbWatch integration
+
+The research opportunity is in reconciling observations and testing models: inconsistent
+parameters, residual spectral features, cross-epoch variability, or gaps where another
+observation would distinguish competing explanations. Forward-model spectra, eclipse
+depths and phase curves from physical scenarios, then compare to observations with
+uncertainties, instrument response and nuisance parameters. Use independent epochs or
+held-out data where possible. Check calibration and stellar contamination before
+escalating a residual. A generated image is not evidence for a discovery.
+
+Add planet identities/aliases and evidence links alongside the existing JWST product
+model; do not force TESS light curves into JWST filename/S3 assumptions. Resolve host
+components and multi-planet systems explicitly. Reuse bounded downloads, provenance,
+storage, optional AI providers and watchlist concepts. Future alerts should say which
+new usable observation changed a planet's evidence or ranking. Catalog refreshes,
+enrichment and image generation must remain separate jobs with separate budgets.
+
+Delivery order:
+
+1. **Implemented:** full-catalog snapshot, explainable proxy ranking, offline replay,
+   sourced prompt export and one appearance-evidence example. The first web portrait
+   preserves the user's image and presents its evidence through accessible category tabs.
+   A ranked web catalog now adds search, facility/spectrum/score filters, shared ranks,
+   per-planet evidence and copy/download prompt controls. It uses a verified bundled
+   archive snapshot and the same scorer/prompt generator as the CLI; appearance enrichment
+   now includes curated HD 189733 b and LTT 9779 b evidence. The second portrait uses
+   CHEOPS/JWST/Hubble/ESPRESSO literature, a labeled narrower field of view, and a saved
+   generation/refinement history. Pixel-level geometry and photometry remain unvalidated.
+   In-app generation now creates separately versioned images from the selected catalog
+   brief, with immutable prompt/evidence snapshots, linked category tabs, downloads and
+   a saved-portrait archive. Local on-demand OpenAI calls have explicit configuration,
+   duplicate-request protection and no automatic retry; production access is deferred.
+2. **Next:** spectrum/program enrichment and reviewed visible/thermal pilot rankings.
+3. **Then:** deterministic rendering, physical constraints and a comparative scenario gallery.
+4. **Research extension:** reproducible physical modeling, residual tests and follow-up
+   prioritization, with human scientific review before any discovery claim.

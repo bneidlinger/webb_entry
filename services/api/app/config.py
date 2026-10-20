@@ -4,7 +4,7 @@ from typing import Literal
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-AIProvider = Literal["openai", "azure_openai"]
+AIProvider = Literal["openai", "azure_openai", "anthropic"]
 
 
 class Settings(BaseSettings):
@@ -38,11 +38,14 @@ class Settings(BaseSettings):
     azure_storage_account_url: str | None = Field(default=None)
     azure_blob_container_fits: str = Field(default="webbwatch-fits")
     azure_blob_container_previews: str = Field(default="webbwatch-previews")
+    preview_local_directory: str | None = Field(default=None)
 
     # ---- JWST source (AWS public bucket, anonymous) ----
     jwst_s3_bucket: str = Field(default="stpubdata")
     jwst_s3_prefix: str = Field(default="jwst/")
     jwst_s3_region: str = Field(default="us-east-1")
+    # Bound individual downloads; decoded FITS arrays may use substantially more RAM.
+    fits_max_download_bytes: int = Field(default=256 * 1024 * 1024, ge=1)
     jwst_sns_topic_arn: str = Field(
         default="arn:aws:sns:us-east-1:879230861493:stpubdata/jwst"
     )
@@ -63,6 +66,15 @@ class Settings(BaseSettings):
     openai_api_key: str | None = Field(default=None)
     openai_model: str = Field(default="gpt-4.1-mini")
 
+    # On-demand planet portraits; independent of text/report AI settings.
+    portrait_generation_enable: bool = Field(default=False)
+    portrait_image_model: str = Field(default="gpt-image-2.5-sunburst", min_length=1)
+    portrait_request_timeout_seconds: int = Field(default=600, ge=30, le=1200)
+
+    # Anthropic direct (also selectable per cloud report).
+    anthropic_api_key: str | None = Field(default=None)
+    anthropic_model: str = Field(default="claude-opus-5-5")
+
     # Azure OpenAI
     azure_openai_endpoint: str | None = Field(default=None)
     azure_openai_api_key: str | None = Field(default=None)
@@ -70,6 +82,35 @@ class Settings(BaseSettings):
     azure_openai_deployment_chat: str = Field(default="gpt-4.1-mini")
     azure_openai_deployment_vision: str = Field(default="gpt-4.1-mini")
     azure_openai_use_managed_identity: bool = Field(default=False)
+
+    # ---- Phase 5: local AI (Ollama, OpenAI-compatible endpoint) ----
+    # Ollama is the user's responsibility to install + run. The worker pings it
+    # per job and no-ops if unreachable; LOCAL_AI_ENABLE gates enqueue so dev
+    # sessions without Ollama don't accumulate failure rows. The base URL ends
+    # in /v1 because that's Ollama's OpenAI-compatible path (default targets a
+    # no-Docker localhost install; the .env.example uses host.docker.internal).
+    ollama_base_url: str = Field(default="http://localhost:11434/v1")
+    local_ai_enable: bool = Field(default=False)
+    local_ai_model: str = Field(default="llama3.1:8b-instruct-q4_K_M")
+    # Phase 5.5: vision is opt-in + on-demand (a heavier multimodal model). On an
+    # 8 GB GPU Ollama swaps between the text and vision models, so we don't
+    # auto-run it. Default fits 8 GB; llama3.2-vision:11b is better on >=12 GB.
+    local_ai_vision_enable: bool = Field(default=False)
+    local_ai_vision_model: str = Field(default="llava:7b")
+    local_ai_max_tokens: int = Field(default=1024)
+    local_ai_temperature: float = Field(default=0.2)
+    local_ai_request_timeout_seconds: int = Field(default=120)
+
+    # ---- Cloud AI (OpenAI / Azure OpenAI / Anthropic) ----
+    # Cloud is opt-in + on-demand (it costs money). CLOUD_AI_ENABLE gates the cloud
+    # / cloud_review enqueue + regenerate, mirroring LOCAL_AI_ENABLE. The provider +
+    # credentials are the AI_PROVIDER / OPENAI_* / AZURE_OPENAI_* / ANTHROPIC_* fields above.
+    cloud_ai_enable: bool = Field(default=False)
+    cloud_ai_max_tokens: int = Field(default=1536)
+    # Reasoning models share this allowance between reasoning and the final JSON.
+    cloud_ai_reasoning_max_tokens: int = Field(default=8192, ge=1, le=128_000)
+    cloud_ai_reasoning_effort: Literal["low", "medium", "high", "xhigh", "max"] = "medium"
+    cloud_ai_request_timeout_seconds: int = Field(default=120)
 
     @property
     def cors_origins_list(self) -> list[str]:

@@ -23,6 +23,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
+    from app.models.ai_report import AiReport
     from app.models.data_product_analysis import DataProductAnalysis
     from app.models.data_product_preview import DataProductPreview
     from app.models.observation import Observation
@@ -50,7 +51,7 @@ class DataProduct(Base, TimestampMixin):
     calibration_version: Mapped[str | None] = mapped_column(String(64))
     crds_context: Mapped[str | None] = mapped_column(String(64))
 
-    cloud_uri: Mapped[str | None] = mapped_column(String(1024))
+    cloud_uri: Mapped[str | None] = mapped_column(String(1024), index=True)
     mast_download_uri: Mapped[str | None] = mapped_column(String(1024))
 
     is_public: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -63,6 +64,10 @@ class DataProduct(Base, TimestampMixin):
         cascade="all, delete-orphan",
     )
     analyses: Mapped[list[DataProductAnalysis]] = relationship(
+        back_populates="data_product",
+        cascade="all, delete-orphan",
+    )
+    ai_reports: Mapped[list[AiReport]] = relationship(
         back_populates="data_product",
         cascade="all, delete-orphan",
     )

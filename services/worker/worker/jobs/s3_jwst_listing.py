@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterator
+from itertools import batched
 
 from app.db import session_scope
 from app.models import DataProduct
@@ -29,6 +30,8 @@ log = logging.getLogger(__name__)
 
 def _iter_keys(bucket: str, prefix: str, max_keys: int, region: str) -> Iterator[str]:
     """Yield S3 keys under `prefix` anonymously. Stops at `max_keys`."""
+    if max_keys <= 0:
+        return
     import boto3
     from botocore import UNSIGNED
     from botocore.config import Config
@@ -36,7 +39,10 @@ def _iter_keys(bucket: str, prefix: str, max_keys: int, region: str) -> Iterator
     s3 = boto3.client("s3", region_name=region, config=Config(signature_version=UNSIGNED))
     paginator = s3.get_paginator("list_objects_v2")
     seen = 0
-    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+    for page in paginator.paginate(
+        Bucket=bucket, Prefix=prefix,
+        PaginationConfig={"MaxItems": max_keys, "PageSize": min(max_keys, 1000)},
+    ):
         for obj in page.get("Contents") or ():
             yield obj["Key"]
             seen += 1
@@ -44,8 +50,10 @@ def _iter_keys(bucket: str, prefix: str, max_keys: int, region: str) -> Iterator
                 return
 
 
-def _list_known_cloud_uris(session: Session) -> set[str]:
-    rows = session.scalars(select(DataProduct.cloud_uri).where(DataProduct.cloud_uri.is_not(None)))
+def _list_known_cloud_uris(session: Session, candidates: tuple[str, ...]) -> set[str]:
+    rows = session.scalars(
+        select(DataProduct.cloud_uri).where(DataProduct.cloud_uri.in_(candidates))
+    )
     return {uri for uri in rows if uri}
 
 
@@ -57,19 +65,20 @@ def run(session: Session | None = None) -> dict:
     max_keys = settings.s3_poll_max_keys
 
     def _execute(sess: Session) -> dict:
-        known = _list_known_cloud_uris(sess)
         scanned = 0
         unknown = 0
-        for key in _iter_keys(bucket, prefix, max_keys, region):
-            scanned += 1
-            uri = f"s3://{bucket}/{key}"
-            if uri not in known:
-                unknown += 1
+        known_count = 0
+        uris = (f"s3://{bucket}/{key}" for key in _iter_keys(bucket, prefix, max_keys, region))
+        for batch in batched(uris, 500):
+            known = _list_known_cloud_uris(sess, batch)
+            scanned += len(batch)
+            known_count += sum(uri in known for uri in batch)
+            unknown += sum(uri not in known for uri in batch)
         summary = {
             "bucket": bucket,
             "prefix": prefix,
             "scanned": scanned,
-            "known": len(known),
+            "known": known_count,
             "unknown": unknown,
         }
         log.info("S3 listing done: %s", summary)

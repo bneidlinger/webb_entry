@@ -41,12 +41,17 @@ from app.models import DataProduct, DataProductPreview
 from app.services.previews import (
     SUPPORTED_VARIANTS,
     PreviewError,
+    ensure_cloud_uri,
     extract_calibration_metadata,
     fetch_fits_anonymous,
     is_supported,
     render_preview,
 )
-from app.services.storage import PreviewStorage, get_preview_storage
+from app.services.storage import (
+    PreviewStorage,
+    get_preview_storage,
+    preview_storage_key,
+)
 
 log = logging.getLogger(__name__)
 
@@ -62,6 +67,7 @@ def _run(
     product_id: int,
     *,
     storage: PreviewStorage | None,
+    fits_data: bytes | None = None,
 ) -> dict:
     product = session.get(DataProduct, product_id)
     if product is None:
@@ -73,7 +79,7 @@ def _run(
             "status": "skipped",
             "reason": "unsupported_product_type",
         }
-    if not product.cloud_uri:
+    if not (product.cloud_uri or product.mast_download_uri or fits_data is not None):
         return {"product_id": product_id, "status": "skipped", "reason": "no_cloud_uri"}
 
     existing = {p.variant: p for p in product.previews}
@@ -97,7 +103,12 @@ def _run(
 
     # ---- fetch FITS -----------------------------------------------------
     try:
-        fits_bytes = fetch_fits_anonymous(product.cloud_uri)
+        if fits_data is not None:
+            fits_bytes = fits_data
+        elif ensure_cloud_uri(product):
+            fits_bytes = fetch_fits_anonymous(product.cloud_uri)
+        else:
+            return {"product_id": product_id, "status": "skipped", "reason": "no_cloud_uri"}
     except PreviewError as e:
         _record_failure(
             session, product, variants_needed, str(e), is_permanent=e.is_permanent
@@ -152,7 +163,7 @@ def _run(
     # ---- upload + persist -----------------------------------------------
     uploaded: list[str] = []
     for variant, (data, width, height) in rendered.items():
-        key = f"{product.id}/{variant}.png"
+        key = preview_storage_key(product.id, variant)
         try:
             url = storage.upload(data=data, key=key, content_type="image/png")
         except Exception as e:  # noqa: BLE001 — Azure/network/io issues
@@ -167,7 +178,7 @@ def _run(
 
     return {
         "product_id": product_id,
-        "status": "ok" if uploaded else "error",
+        "status": "ok" if len(uploaded) == len(variants_needed) else "error",
         "uploaded": uploaded,
         "metadata_updated": bool(
             meta.get("calibration_version") or meta.get("crds_context")

@@ -24,7 +24,7 @@ jobs:
       - run: pytest -q
 
   worker:
-    name: worker · lint
+    name: worker · lint + test
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -35,8 +35,9 @@ jobs:
         with:
           python-version: "3.12"
           cache: "pip"
-      - run: pip install -e ".[dev]"
+      - run: pip install -e ../api -e ".[dev]"
       - run: ruff check .
+      - run: pytest -q
 
   web:
     name: web · lint + typecheck + build

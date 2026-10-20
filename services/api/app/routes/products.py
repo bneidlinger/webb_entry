@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_session
 from app.models import DataProduct, Observation
@@ -27,7 +27,10 @@ def list_products(
     Powers the public feed — each row already has everything a card needs.
     """
     join_clause = Observation, DataProduct.observation_id == Observation.id
-    stmt = select(DataProduct, Observation).join(*join_clause)
+    stmt = (
+        select(DataProduct, Observation).join(*join_clause)
+        .options(selectinload(DataProduct.previews))
+    )
     count_stmt = select(func.count()).select_from(DataProduct).join(*join_clause)
 
     if product_type:

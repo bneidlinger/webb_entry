@@ -2,7 +2,8 @@
 
 **Audience.** A Claude (or human engineer) opening this repo cold who needs to be production-effective inside one session. This document complements — does not replace — [`CLAUDE.md`](../CLAUDE.md) (per-session orientation) and [`webbwatch_ai_project_plan.md`](../webbwatch_ai_project_plan.md) (design source of truth). Read this once at the start of any meaningful work; it codifies *why*, *what we know*, and *what we deliberately don't*. Skim in 3 min; deep-read in 10. Length is the price of not repeating mistakes.
 
-**Last updated.** End of Phase 4 (2026-05-25).
+**Last updated.** Catalog portrait previews (2026-10-19 Pacific), sections 15–20. See section 13
+for bounded processing and startup behavior; earlier phase notes retain history.
 
 ---
 
@@ -36,6 +37,12 @@ Each of these is a deliberate, load-bearing decision. Changing one cascades. Bri
 | **Analyzer dispatch is hardcoded; no plugin registry** | N=2 (image + spectrum). A registry adds indirection for hypothetical future analyzers we don't have requirements for. Cube (s3d) returns None from the dispatcher → job-layer skip. | `services/api/app/services/analysis/__init__.py::get_analyzer_for`. |
 | **Reproducibility metadata lives inside `measurements_json`** | scipy/numpy/astropy versions + crds_context + calibration_version under `measurements_json["meta"]`. Keeps schema stable while letting future re-runs diff against past ones. | `services/api/app/services/analysis_job.py::_build_meta`. |
 | **Version bumps preserve history; same-version re-runs overwrite** | Unique constraint on `(data_product_id, analyzer_name, analyzer_version)`. Re-running v1 is a no-op; bumping the analyzer to v2 creates a new row alongside v1 for diffing. API returns only the latest per analyzer name. | `services/api/app/models/data_product_analysis.py`; `services/api/app/routes/analyses.py`. |
+| **AI is the second pass; it never touches FITS** | The local model narrates over `DataProductAnalysis.measurements_json` + metadata only (plan §6/§13 credibility surface). `analysis_job` chains `enqueue_ai_report` on success so measurements always exist first; `ai_job` *also* independently requires a successful analysis row. | `services/api/app/services/ai_job.py`; `services/api/app/services/analysis_job.py` (success path). |
+| **`AiProvider` is one sync protocol for local + cloud** | Providers run inside the sync RQ worker. The Phase 0 async `clients/ai` stub was reshaped onto this protocol as `services/ai/cloud.CloudAiProvider` and **deleted** — one hierarchy. | `services/api/app/services/ai/base.py`, `cloud.py`. |
+| **`LOCAL_AI_ENABLE` gates the AI enqueue (default off)** | Same opt-in as `JWST_SNS_ENABLE`. Off → `enqueue_ai_report` no-ops, so dev sessions without Ollama never accumulate failure rows. | `services/api/app/services/queue.py::enqueue_ai_report`; `app/config.py`. |
+| **AI reports overwrite-in-place per `(product, mode, model_name, prompt_version)`** | Mirrors the analysis table. Regenerate re-runs and replaces; a `PROMPT_VERSION` bump forks a new row. API returns the latest per `(mode, model_name)`. | `services/api/app/models/ai_report.py`; `services/api/app/services/ai_job.py`. |
+| **Vision is on-demand and a separate report (`mode="local_vision"`)** | The vision model loads only on an explicit regenerate (plan §6 one-model-at-a-time), so no preview/analysis job coupling. It reuses the `ai_reports` table + `mode` column (no migration), so the text + vision reports coexist. `PreviewStorage.read` feeds the preview PNG to the provider. | `services/api/app/services/ai_job.py`; `app/routes/ai_reports.py` (`?mode=`, `?vision` alias); `app/services/storage.py`. |
+| **Cloud AI is on-demand + cost-gated, never auto-chained** (Phase 6) | Cloud costs money (plan §14). `CLOUD_AI_ENABLE` gates it (default off); only the local text pass auto-runs after analysis. All four passes (`local`/`local_vision`/`cloud`/`cloud_review`) share one `ai_job._run` via `_PassSpec`, keyed on a `mode` string. | `services/api/app/services/ai_job.py` (`_resolve_pass_spec`); `app/services/ai_modes.py`; `queue.py::enqueue_ai_report`. |
 
 ---
 
@@ -54,7 +61,9 @@ services/api/app/
     watchlist.py, alert.py          # Phase 2 schema.
     data_product_preview.py         # Phase 3 schema (one row per (product, variant)).
     data_product_analysis.py        # Phase 4 schema (one row per (product, analyzer, version)).
+    ai_report.py                    # Phase 5/5.5 schema (one row per (product, mode, model_name, prompt_version)).
   clients/mast.py                  # Astroquery wrapper. assemble() is pure.
+  clients/ai/                      # Phase 0 cloud stub (async, UNUSED). Phase 6 reshapes onto services/ai/base.
   services/
     ingest.py                      # Upsert + alert hook + preview/analysis enqueue. The hot path.
     match.py                       # Pure function: (product, obs, criteria) -> (bool, reason).
@@ -71,11 +80,23 @@ services/api/app/
       __init__.py                  # get_analyzer_for(product_type) dispatch.
     analysis_types.py              # Light: is_analyzable(). No scipy import.
     analysis_job.py                # Orchestration: fetch → analyze → persist.
-    storage.py                     # Local fs / Azure Blob backends.
-    queue.py                       # Soft-import rq + best-effort enqueue (preview + analysis).
+    ai/                            # Phase 5/6: local + cloud AI providers + prompts + report schema.
+      base.py                      # AiProvider protocol (SYNC); AiError; AiCompletion (+cost_estimate/usage).
+      local.py                     # OllamaProvider (openai SDK; image= → vision).
+      cloud.py                     # Phase 6: CloudAiProvider (OpenAI + Azure; JSON-schema output + cost).
+      _messages.py                 # shared user-turn builder (text + base64 image) for both providers.
+      pricing.py                   # Phase 6: cloud price table + cost_from_usage + pre-run estimate.
+      schemas.py                   # AiReportPayload (§7) + parse_ai_report + ai_report_json_schema.
+      prompts/                     # image/spectrum _v1 (SYSTEM + VISION); reviewer_v1 (Phase 6, kind-agnostic).
+      __init__.py                  # get_ai_provider(settings, mode=) (provider-aware) + cloud_config_error.
+    ai_modes.py                    # Phase 6: mode list + enable-gate map (import-cheap; queue hot path).
+    ai_job.py                      # Phase 5/6: _PassSpec drives local/vision/cloud/cloud_review → AiReport.
+    storage.py                     # Local fs / Azure Blob backends. upload() + read() (read added for vision).
+    queue.py                       # Soft-import rq + enqueue (preview + analysis + ai by mode).
   routes/                          # FastAPI routers, one per resource.
     previews.py                    # Serves local-fs PNGs at /api/previews/{path}.
     analyses.py                    # GET /api/products/{id}/analysis.
+    ai_reports.py                  # GET ai-reports + POST .../regenerate(?mode=) + GET .../cost-estimate.
   schemas/                         # Pydantic response models.
   cli/                             # Typer subcommands. Entry: python -m app
 
@@ -88,12 +109,13 @@ services/worker/worker/
     s3_jwst_listing.py             # 6-h: anonymous list, detect unknown keys.
     preview_gen.py                 # Thin re-export of app.services.preview_job.generate_for_product.
     analyze_product.py             # Thin re-export of app.services.analysis_job.generate_analysis_for_product.
+    ai_report.py                   # Thin re-export of app.services.ai_job.generate_ai_report_for_product.
 
 apps/web/
   app/page.tsx                     # Feed (server component).
   app/alerts/page.tsx              # Alerts (server component).
-  app/products/[id]/page.tsx       # Phase 4 detail page (server component, parallel-fetches product + analysis).
-  components/                      # ProductFeed, AlertFeed, HealthBadge.
+  app/products/[id]/page.tsx       # Detail page: product + analysis + AI reports (text + vision cards).
+  components/                      # ProductFeed, AlertFeed, HealthBadge, RegenerateAiButton (client; text + vision).
   lib/api.ts                       # Typed fetch wrappers + Result<T>.
 ```
 
@@ -254,6 +276,14 @@ Schema docs that don't fit in model file docstrings.
 - Failure model is identical to previews: `attempts` JSON, `last_error`, `is_permanent_failure`. Permanent: malformed FITS, missing extension, all-NaN data. Transient: S3 network errors after a successful URI parse.
 - `calibration_version` and `crds_context` on `data_products` are populated by analysis as a side effect too (same `extract_calibration_metadata` helper from `previews.py`) — first one to run wins; neither preview_gen nor analysis_job overwrites an existing value.
 
+### `ai_reports` (Phase 5)
+- One row per `(data_product_id, mode, model_name, prompt_version)`. Unique constraint enforces it; overwrite-in-place like `data_product_analyses`.
+- `mode` is `"local"`/`"local_vision"` (Phase 5/5.5) or `"cloud"`/`"cloud_review"` (Phase 6). `model_name` is the Ollama model tag (local) or the OpenAI model id / Azure deployment (cloud); `prompt_version` is the prompt module's `PROMPT_VERSION`.
+- `report_json` is null until success; non-null = usable. It holds the validated plan-§7 report (`summary`, `measured_facts`, `interesting_features`, `quality_flags`, `recommended_next_steps`, `human_validation_required`, `tags`) **plus** a `model_notes` block (`model`, `prompt_version`, `mode`, `created_at`) stamped by the job — the model never authors `model_notes`.
+- `input_summary_json` snapshots the exact payload sent to the model (product + observation + measurements) for reproducibility/debugging — it equals what `build_user_prompt` rendered.
+- Failure model is identical to previews/analyses: `attempts` JSON, `last_error`, `is_permanent_failure`. Permanent: unparseable/invalid JSON output, missing model. Transient: Ollama unreachable, unreadable preview. The GET endpoint returns the latest row per `(mode, model_name)`; failed rows surface so the UI can show them.
+- `mode` ∈ `"local"`/`"local_vision"` (Phase 5/5.5) and `"cloud"`/`"cloud_review"` (Phase 6 — cloud text + reviewer); any number of `(mode, model_name)` rows coexist, and `report_json["model_notes"]["mode"]` records which produced a given report. `cost_estimate` (USD, nullable) is set for cloud rows from the provider's token usage (null for local — free — and for failed rows); reviewer rows persist the critiqued report under `input_summary_json["local_report"]`.
+
 ---
 
 ## 6. What's deferred (and why) — read before assuming something is "missing"
@@ -275,6 +305,7 @@ Through Phase 3 we explicitly do *not* do these. If you find yourself wanting on
 - **next/image optimization.** Frontend uses `<img>` with eslint-disable. Switching to `next/image` requires adding the API host to `next.config.js`'s `images.domains` (which differs between dev/prod) — defer until image volumes warrant it.
 - **Photometry / calibrated SNR.** Phase 4 source count is coarse (connected components); SNR is a `|median|/MAD` proxy. photutils is the right tool for photometry — already declared as an *optional* extra in the worker pyproject. Wire it when Phase 5+ wants flux-per-source or SNR-per-resel.
 - **Analysis history endpoint.** API returns only the latest row per analyzer name. The DB keeps every version. Add `/api/products/{id}/analysis/history` when version diffing becomes a real workflow.
+- **Cloud vision** (`mode="cloud_vision"`). Phase 6 shipped cloud text + reviewer; cloud vision is a one-flag extension — the `mode`/image plumbing already carries through (`get_ai_provider(mode=...)` reads the `vision` suffix; `CloudAiProvider.complete(image=)` works) — but it's unwired (no prompt/button) because it costs $$ per call and local vision already exists. Note: `mode="cloud_review_vision"` (19 chars) would exceed the `ai_reports.mode` `String(16)` — bump the column if a combined mode is ever needed.
 
 ---
 
@@ -370,9 +401,28 @@ Through Phase 3 we explicitly do *not* do these. If you find yourself wanting on
 
 ---
 
-## 7c. Phase 5 directions — local AI analysis (next)
+## 7c. Phase 5 — local AI analysis (Ollama) (shipped, retained for reference)
 
-Plan reference: [plan §11 Phase 5](../webbwatch_ai_project_plan.md) (scope), [plan §6](../webbwatch_ai_project_plan.md) (AI principles), [plan §7](../webbwatch_ai_project_plan.md) (report schema), [plan §8](../webbwatch_ai_project_plan.md) (`analysis_runs` table). This section is the contract between past planning (2026-05-28) and the next session that picks up Phase 5.
+Plan reference: [plan §11 Phase 5](../webbwatch_ai_project_plan.md) (scope), [plan §6](../webbwatch_ai_project_plan.md) (AI principles), [plan §7](../webbwatch_ai_project_plan.md) (report schema), [plan §8](../webbwatch_ai_project_plan.md) (`analysis_runs` table).
+
+**Shipped 2026-05-30** (5 commits `52b5f55..` on `main`). The planning subsections below (§7c.0–7c.7) are the original design intent (2026-05-28), retained for rationale. This block records what actually landed and where the build resolved or diverged from that plan.
+
+### What landed
+
+1. **`ai_reports` table** — one row per `(data_product_id, mode, model_name, prompt_version)`; overwrite-in-place + the same failure model as `data_product_analyses`. Migration `dff64aa9d87f`. `report_json` (validated plan-§7 report + a `model_notes` block the job stamps), `input_summary_json` (the exact payload sent), `attempts`/`last_error`/`is_permanent_failure`.
+2. **`app/services/ai/`** — sync `AiProvider` Protocol + `AiError`/`AiProviderHealth`/`AiCompletion` (`base.py`); `OllamaProvider` over the openai SDK with a `client=` test seam (`local.py`); `get_ai_provider(settings)` factory (`__init__.py`); versioned prompts `prompts/{image,spectrum}_summary_v1.py` (`PROMPT_VERSION`/`SYSTEM_PROMPT`/`build_user_prompt`) + `get_prompt_for(kind)`; Pydantic report schema + tolerant `parse_ai_report` (`schemas.py`).
+3. **`app/services/ai_job.py`** — orchestrator mirroring `analysis_job`. Guards in order: disabled → not_found → no_analysis → unsupported_kind → permanent/already_generated (unless `force`). Reads the latest successful `DataProductAnalysis.measurements_json`, builds the payload, renders the kind-specific prompt, calls the provider, validates, persists.
+4. **Wiring** — `queue.enqueue_ai_report(force=)` (LOCAL_AI_ENABLE-gated, `analyze` queue, 300s timeout). `analysis_job` chains it on a successful analyze. `worker/jobs/ai_report.py` shim.
+5. **API + UI** — `GET /api/products/{id}/ai-reports` (latest per `(mode, model_name)`) + `POST .../regenerate` (force). Product detail page "AI summary" section (AI-generated badge, summary, measured facts, confidence/severity-badged features + quality flags, next steps, tags, human-validation caveat, failure/empty states) + a client regenerate button.
+6. **Config** — `OLLAMA_BASE_URL` (now ends in `/v1`), `LOCAL_AI_ENABLE` (default off), `LOCAL_AI_MODEL/MAX_TOKENS/TEMPERATURE/REQUEST_TIMEOUT_SECONDS`.
+7. **Tests** — 51 new (173 API total, all green without Ollama via a fake provider / injected openai client); frontend `typecheck` + `next build` clean.
+
+### How the plan's open questions (§7c.4) resolved
+
+- **Ordering (Q1):** option (a) — `analysis_job` chains `enqueue_ai_report` on success; `ingest.py` untouched. **Deviation from the §7c.3 file list:** there is no `ai_reports_enqueued` counter in `IngestResult`; the chain is asserted in the analysis-job tests instead.
+- **Regenerate (Q2):** **overwrite-in-place**, *not* the plan's tentative "new row" — consistent with the Phase 4 analyzer table and the `(product, mode, model_name, prompt_version)` unique key. `force=True` re-runs and replaces; a `PROMPT_VERSION` bump forks a new row.
+- **Bad JSON (Q3):** tolerant parse (fences / surrounding prose / trailing comma) → permanent `AiError`, no auto-retry. **CRDS + calibration (Q5):** carried in the payload via `measurements_json["meta"]`. **Preview to model (Q4):** no. **Auto-pull (Q6):** no → `model_not_found` is permanent.
+- **Provider placement:** new `services/ai/` per the plan, but the `AiProvider` Protocol is **sync** (it runs in the sync RQ worker). The Phase 0 `clients/ai` cloud stub (async, **zero live callers** — confirmed by grep) was left untouched; **Phase 6 reshapes it onto `services/ai/base.AiProvider`** rather than maintaining two hierarchies.
 
 ### 7c.0 What Phase 5 is — and what it isn't
 
@@ -412,7 +462,7 @@ Cloud AI lands in Phase 6 as a second `AiProvider` implementation. The protocol 
 
 **Docs.** Rewrite §7c "(next)" → "(shipped, retained for reference)" parallel to §7 and §7b. Update CLAUDE.md state line. Add `ai_reports` entry to §5 data-model reference.
 
-### 7c.4 Open questions to resolve before coding
+### 7c.4 Open questions to resolve before coding (RESOLVED — see "How the plan's open questions resolved" in the shipped block above)
 
 1. **RQ job dependency vs in-job enqueue.** "AI sees measurements" needs analysis to finish first. Options: (a) `analyze_job` enqueues `ai_job` as its last successful step (simple, in-job), (b) both enqueued at ingest, AI declared `depends_on=analyze_job` to RQ (visible in dashboards, depends on rq-scheduler dependency support). Pick (a) for simplicity unless you want the dashboard surface.
 2. **Regenerate: overwrite or new row?** Recommendation: **new row**. Matches plan §8's `analysis_runs` audit-trail design + the analyzer pattern. GET returns latest; garbage-collect old non-latest rows in a future sweep if volume warrants.
@@ -425,7 +475,7 @@ Cloud AI lands in Phase 6 as a second `AiProvider` implementation. The protocol 
 
 - **Cloud AI** — Phase 6. The `AiProvider` protocol gets a second implementation.
 - **Reviewer mode** (cloud critiques local) — Phase 6, plan §11.
-- **Vision-capable model** — Phase 5.5. Text-only first to prove the pipeline shape. Adding vision = new provider implementation + prompt variant + base64-encoded image attachment.
+- **Vision-capable model** — ✓ shipped in Phase 5.5 (§7c.8): an on-demand multimodal pass over the preview PNG, `mode="local_vision"`. (Phase 5 was text-only first to prove the pipeline shape.)
 - **Settings page UI** — Phase 6. Env vars are sufficient until cloud lands and there's a real config surface.
 - **Cost tracking / usage quotas** — local is free; cloud adds this in Phase 6.
 - **Multi-product comparison** — needs related-products query, plan §5.C.
@@ -452,6 +502,89 @@ Don't try to land Phase 5 in one commit. Suggested split:
 5. **Docs:** rewrite §7c as "shipped" parallel to §7 / §7b; update CLAUDE.md + §5 data-model.
 
 Steps 1-3 are entirely testable without Ollama installed (mocked openai client). Step 4 needs Ollama running locally to exercise end-to-end, but you can verify the frontend renders empty + error states with API stubs.
+
+### 7c.8 Phase 5.5 — vision over the preview (shipped 2026-05-30)
+
+On-demand local vision (4 commits `360a73b..` on `main`). A multimodal model also looks at the product's full preview PNG and writes a **second** report, `mode="local_vision"`, alongside the text `mode="local"` one.
+
+- **On-demand, not auto** (user decision + plan §6 "one model at a time"): triggered only by `POST .../ai-reports/regenerate?vision=true` (the "Generate vision summary" button). Text still auto-runs. So there's **no preview/analysis job coupling**, the heavy vision model loads only when invoked, and the preview is guaranteed present by click-time.
+- **No DB migration** — `mode` reuses the existing `String(16)` column. The GET (latest per `(mode, model_name)`) + the frontend (maps all reports) surface both, with a "vision" chip on the vision card.
+- **Image source:** the full preview PNG, read back via the new `PreviewStorage.read(key)` (both backends) using `storage.preview_storage_key` (single-sourced with `preview_job`), base64'd into a multimodal chat message by `OllamaProvider.complete(image=)`.
+- **Vision prompts:** `VISION_SYSTEM_PROMPT` + `VISION_PROMPT_VERSION` per prompt module — base guardrails plus "corroborate visually, the measurements stay authoritative, never read numbers off the image".
+- **Config:** `LOCAL_AI_VISION_ENABLE` (default off), `LOCAL_AI_VISION_MODEL` (`llava:7b`; `llama3.2-vision:11b` for ≥12 GB). `get_ai_provider(vision=)` picks the model. The vision job adds `vision_disabled` + `no_preview` skips to the Phase 5 guard set; an unreadable preview is transient.
+- **What we don't do:** auto-run vision per match (model-swap thrash); a spectrum is eligible too (its chart is the image). Cloud vision is Phase 6.
+
+---
+
+## 7d. Phase 6 — cloud AI review (shipped 2026-06-02)
+
+Plan reference: [plan §11 Phase 6](../webbwatch_ai_project_plan.md) (scope), [plan §6](../webbwatch_ai_project_plan.md) (cloud AI role + OpenAI vs Azure OpenAI), [plan §7](../webbwatch_ai_project_plan.md) (report schema).
+
+**Shipped 2026-06-02** (5 commits `9fe397a..cb1dabc` on the `phase-6-cloud-ai` branch). The §7d.0–7d.7 subsections below are the original design intent (2026-05-30), retained for rationale; this block records what actually landed.
+
+### What landed
+
+1. **`CloudAiProvider`** (`app/services/ai/cloud.py`) — one sync class serving OpenAI **and** Azure OpenAI behind the existing `AiProvider` protocol, reshaped from the zero-caller Phase 0 `app/clients/ai/` stub (**deleted** — one provider hierarchy now). `chat.completions` with a strict JSON-schema `response_format` (`schemas.ai_report_json_schema`), `json_object` fallback for Azure api-versions < `2024-08-01`; `parse_ai_report` stays the validation gate. Error taxonomy: auth / permission / bad-request / not-found → **permanent**; rate-limit / timeout / connection / generic 5xx → **transient**. The `client=` constructor arg is the test seam, mirroring Ollama.
+2. **Mode-aware factory** — `get_ai_provider(settings, *, mode=)` picks Ollama vs cloud (per `AI_PROVIDER`); `cloud_config_error(settings)` is a no-network pre-flight reused by the job guard + the cost route. Azure managed identity uses **sync** `azure.identity` (salvaged from the stub; **not** `.aio`).
+3. **Pass-spec `ai_job`** — the `vision` bool became a `mode` string end-to-end (job entry, `enqueue_ai_report`, RQ args, route `?mode=`; `?vision=true` kept as an alias). `_PassSpec` + `_resolve_pass_spec` unify `local` / `local_vision` / `cloud` / `cloud_review`. New skips: `cloud_ai_disabled`, `cloud_not_configured`, `no_local_report`. Lightweight `app/services/ai_modes.py` holds the enable-gate map so `queue.py` (ingest hot path) stays matplotlib-free.
+4. **Reviewer mode** (`mode="cloud_review"`) — `prompts/reviewer_v1.py` (kind-agnostic) critiques the latest successful local report against the measurements, reusing `AiReportPayload` (critique → `quality_flags`, per-claim verdicts → `interesting_features`, checks → `recommended_next_steps`), so the report card needs no new component. The local report is injected into the payload + persisted as `input_summary_json["local_report"]`.
+5. **Cost** — `ai_reports.cost_estimate` (migration `719f12cac17a`, nullable Float) records actual USD from the provider's token `usage` (null for local/failures). `pricing.py` (price table + `cost_from_usage` + `estimate_cost`) + `ai_job.estimate_cost_for_product` back a pre-run estimate. API: `AiReportRead.cost_estimate` + `GET .../ai-reports/cost-estimate?mode=`. Frontend: Local-vs-Cloud side-by-side columns, generalized mode chips, per-card cost, cloud/review buttons showing the pre-run estimate.
+6. **Config** — `CLOUD_AI_ENABLE` (default off), `CLOUD_AI_MAX_TOKENS` (1536), `CLOUD_AI_REQUEST_TIMEOUT_SECONDS` (120). Provider keys (`AI_PROVIDER` / `OPENAI_*` / `AZURE_OPENAI_*`) already existed in config + `.env.example`.
+7. **Tests** — 53 new (244 API total, all green without keys/Ollama via mocked clients / a fake provider). Web typecheck + build clean.
+
+### How the open questions (§7d.4) resolved
+
+- **Sync vs async (Q1):** sync — cloud runs in the worker like Ollama; the async stub was deleted.
+- **Which providers (Q2):** **both** OpenAI + Azure behind `AI_PROVIDER` (default `openai`); one class, two client-construction branches in the factory.
+- **Cost surface (Q3):** a dedicated nullable `cost_estimate` column (queryable, survives failure rows), **not** `model_notes`. No per-user quotas (deferred to Phase 8 auth — `user_id` is still hardcoded `"default"`).
+- **Reviewer scope (Q4):** **full critique** (claim-by-claim), reusing `AiReportPayload`.
+- **Cloud vision (Q5):** **deferred** — the `mode`/image plumbing carries through (`get_ai_provider(mode=...)` reads the `vision` suffix, `CloudAiProvider.complete(image=)` works), but no prompt/button this phase.
+
+### 7d.0 What Phase 6 is
+
+Add an optional **cloud** AI pass (OpenAI **or** Azure OpenAI) as a second `AiProvider`, plus a **reviewer mode** where the cloud model critiques the local report and flags unsupported claims (plan §11). Same facts-first principle (plan §6/§13): the cloud model sees measurements + preview + (for reviewer mode) the local report — never raw FITS. Cost is real here, so it's opt-in + estimated.
+
+### 7d.1 What's already in place to build on (do NOT rebuild)
+
+- **The `AiProvider` protocol is the seam** (`app/services/ai/base.py`, sync). A cloud provider implements the same `complete(*, system, user, max_tokens, temperature, image=, ...)`. Image support already exists (base64 data URI), so cloud vision is the same call.
+- **`ai_reports.mode` already generalizes** — Phase 6 is `mode="cloud"` (+ e.g. `"cloud_review"` for reviewer mode). **No migration** for the basic cloud pass; GET returns latest per `(mode, model_name)` and the frontend already renders any number of report cards (add a `mode` chip like the vision one).
+- **The Phase 0 `app/clients/ai/` stub is the thing to reshape** — `CloudAIProvider` (async) + OpenAI + Azure adapters + `get_cloud_ai_provider` factory keyed on `AI_PROVIDER`, **zero live callers**. Fold it onto `services/ai/base.AiProvider` rather than keep two hierarchies. Config already exists: `AI_PROVIDER`, `OPENAI_API_KEY/MODEL`, `AZURE_OPENAI_*`.
+- **`ai_job._run` is already parametrized by mode** (text vs vision). A cloud pass is another branch of the same pass-spec — don't fork a new orchestrator. `enqueue_ai_report` + the `analyze` queue + the regenerate route extend the same way.
+- **Tests mock the client** — `test_ai_local_provider` injects a fake `OpenAI` client; the cloud provider takes the same `client=` seam.
+
+### 7d.2 Architectural calls (recommended, confirm in §7d.4)
+
+- **Generalize the pass-spec, don't add a third job function.** `ai_job._run(vision=)` → a `(mode, model_name, prompt_version, system_prompt, with_image)` spec so local / vision / cloud / reviewer all share guards + idempotency + persistence.
+- **Cloud is on-demand + cost-gated**, like vision — a "Cloud review" button, never auto per match (plan §14 cost risk). Show an estimate before running.
+- **Reviewer mode is its own `mode`** whose payload includes the local `report_json` + measurements; the prompt asks the model to flag unsupported claims and suggest checks. Its own `ai_reports` row.
+- **Reuse `AiReportPayload`** so cloud/review cards need no new frontend components.
+
+### 7d.3 Likely shape — files
+
+`app/services/ai/cloud.py` (reshape `clients/ai/*` into it) implementing `AiProvider`; `get_ai_provider` gains cloud selection via `AI_PROVIDER`. A cost-estimate helper + where to persist `cost_estimate` (plan §8 had it on `analysis_runs`; we don't persist cost yet — new column on `ai_reports` or stash in `report_json["model_notes"]`). Reviewer prompt module(s) under `prompts/`. Routes: extend regenerate (`?mode=`) or add `POST .../ai-reports/cloud-review`. Frontend: cloud + review buttons, side-by-side local-vs-cloud view (plan §11). Tests mock the OpenAI/Azure client.
+
+### 7d.4 Open questions to resolve with the user before coding
+
+1. **Sync vs async cloud.** Shared `AiProvider` is sync (worker context); the Phase 0 stub is async. Recommend **sync** (run cloud in the worker like local; the SDK supports both).
+2. **OpenAI, Azure OpenAI, or both at launch?** `AI_PROVIDER` already switches. Build/test only what the user has keys for.
+3. **Cost surface.** New `cost_estimate` column on `ai_reports` vs inside `model_notes`? Per-user quotas now or defer to Phase 8 auth?
+4. **Reviewer mode scope.** Full plan §11 (critique + flag unsupported claims + follow-ups) vs a thinner "second opinion" first.
+5. **Cloud vision** auto or on-demand? Recommend on-demand (it costs $$).
+
+### 7d.5 Deferred past Phase 6 (per plan)
+
+Public shareable feed + social (Phase 7); auth + rate limiting + Key Vault + Azure deploy (Phase 8). Multi-product comparison needs a related-products query (plan §5.C).
+
+### 7d.6 Pitfalls to expect
+
+- **Secrets**: real OpenAI/Azure keys must never touch `.env.example` or git (push protection). Local `.env` only.
+- **Azure OpenAI uses a *deployment name*, not a model id**, and requires an API version — already modeled (`AZURE_OPENAI_DEPLOYMENT_*`, `AZURE_OPENAI_API_VERSION`).
+- **Structured output**: OpenAI supports real JSON-schema response formats — prefer that, but keep `parse_ai_report` as the fallback.
+- **Don't snapshot cloud output** — mock the client, assert request shape + validate response shape (same as local).
+
+### 7d.7 Suggested commit order
+
+1. Reshape `clients/ai` → a cloud provider implementing `services/ai/base.AiProvider` + `get_ai_provider` cloud selection + provider tests (mocked client). 2. Generalize `ai_job` pass-spec + `mode="cloud"` + enqueue/route wiring + tests. 3. Reviewer mode (`mode="cloud_review"`, prompt, payload includes the local report). 4. Cost estimate + frontend (cloud/review buttons, side-by-side local-vs-cloud). 5. Docs (this §7d → "shipped", parallel to §7c).
 
 ---
 
@@ -521,7 +654,19 @@ Things that already cost us debugging time. Read this before re-falling into the
 
 14. **ESLint `@next/next/no-img-element` only suppresses the immediately-following line.** A multi-line `<img ...>` JSX block won't be silenced by `// eslint-disable-next-line` placed before the variable declaration. Collapse to `const img = <img ... />;` on one line, or use `{/* eslint-disable-next-line ... */}` inside JSX.
 
-15. **The worker's `preview_gen.py` is intentionally trivial.** The orchestration lives in `app.services.preview_job` so tests in the api venv can drive `_run()` directly without standing up rq/redis. If you're adding logic to "the worker job," you're probably looking in the wrong file — edit `preview_job.py` instead.
+15. **The worker's `preview_gen.py` is intentionally trivial.** The orchestration lives in `app.services.preview_job` so tests in the api venv can drive `_run()` directly without standing up rq/redis. If you're adding logic to "the worker job," you're probably looking in the wrong file — edit `preview_job.py` instead. (Same for `analyze_product.py` → `analysis_job.py` and `ai_report.py` → `ai_job.py`.)
+
+16. **Ollama JSON mode is "mostly JSON".** `parse_ai_report` (`app/services/ai/schemas.py`) isolates the outermost `{…}`, tolerates markdown fences + a trailing comma, then Pydantic-validates. A failure is **permanent** (no auto-retry — a 7B model rarely self-corrects); the operator regenerates. Don't add retry-on-parse-failure.
+
+17. **Don't snapshot AI output in tests.** At `LOCAL_AI_TEMPERATURE > 0` the same prompt varies run-to-run. Tests snapshot the *prompt* (dispatch, version, guardrails, measurements flow-through) and validate the output *shape*, never its content — see `test_ai_prompts.py` and `test_ai_job.py` (which drives a fake provider, never a live model).
+
+18. **Ollama cold-start can exceed RQ's default timeout.** The first request after the server starts loads weights into VRAM (30s+). The AI job runs with a 300s `job_timeout` (`queue.AI_JOB_TIMEOUT`); the provider request timeout is `LOCAL_AI_REQUEST_TIMEOUT_SECONDS` (default 120). On Windows, Ollama's base URL is `http://localhost:11434` but the OpenAI-compatible path **adds `/v1`** → `http://localhost:11434/v1`.
+
+19. **Vision (Phase 5.5) uses a second, heavier model — keep it on-demand.** `mode="local_vision"` loads `LOCAL_AI_VISION_MODEL`, which on 8 GB VRAM swaps with the text model. It runs only on an explicit regenerate (`?vision=true`) and needs a full preview to exist first (`no_preview` skip otherwise). Adding vision needed **no migration** — `mode` is just a new value in the existing column, and the text + vision reports coexist (GET returns latest per `(mode, model_name)`).
+
+20. **`queue.py` must stay matplotlib-free — it's on the ingest hot path** (§9.13). Phase 6's mode→enable-flag map lives in `app/services/ai_modes.py` (no heavy imports) precisely so `queue.enqueue_ai_report` imports `mode_enabled` from there, not from `ai_job` (which transitively pulls `previews` → matplotlib). Routes + `ai_job` may import freely; `queue.py` may not. The `vision` bool → `mode` string migration touched the job, the queue, the route (`?mode=`, with `?vision=true` kept as an alias), and their tests — change all in lockstep if you touch the RQ args.
+
+21. **Cloud cost pricing keys on the model id, not the Azure deployment name.** `pricing.price_for` falls back to a conservative `_DEFAULT` for an unknown model/deployment, so a custom Azure deployment yields a rough per-token price — but `cost_estimate` is still computed from the provider's **real** token `usage`, so it's only the price that's approximate. Bump `_PRICES` in `app/services/ai/pricing.py` when prices drift. The pre-run estimate additionally uses a chars/4 token heuristic (it can't know exact tokenization before the call).
 
 ---
 
@@ -558,3 +703,366 @@ Already in `CLAUDE.md` but repeated here so this document is freestanding.
 ## 12. If you change something on this list, update this document
 
 This file is the contract between past and future sessions. If you change an invariant, a code map entry, a deferred-work entry, or a known pitfall, update *this* file in the same commit. Otherwise the next session will be wrong before it starts.
+
+## 13. Scale review and local validation (2026-10-01)
+
+The exabyte figure is a design target for the potential source archive, not a measured
+JWST archive size or a claim that this application processes exabytes. Keep source
+objects in their archive and select a small subset for processing. The existing
+single-database, whole-FITS worker architecture is a local prototype.
+
+### Fixed in this review
+
+- MAST observation limits now reach the server as `pagesize=limit, page=1`, with
+  `dataRights=PUBLIC`. Previously all matching observations were fetched and then sliced.
+  This is a bounded first page, not a guarantee of newest-first ordering or full coverage.
+  [Astroquery's documented page semantics](https://astroquery.readthedocs.io/en/stable/api/astroquery.mast.ObservationsClass.html)
+  explain why both arguments are needed.
+- Preview and analysis jobs resolve MAST-only URIs on demand via astroquery's cloud
+  lookup. All 42 saved catalog rows initially lacked cloud URIs and could not be processed.
+  Only products selected for work incur the lookup; metadata ingest stays lightweight.
+- FITS reads check response size, limit the body read, close the stream, and use network
+  timeouts. The default cap is 256 MiB; exceeding it remains retryable after changing the
+  budget. This does not bound decompression or numerical-array RAM usage.
+- Ingest queries existing products in batches of at most 500 input filenames per
+  observation. Product feed previews use eager batch loading instead of one query per row.
+- S3 reconciliation looks up only the current batch of at most 500 candidate URIs.
+  Migration `b814a213fc20` adds the cloud URI index. `known` now means known among scanned
+  objects, not the size of the entire catalog.
+- Docker builds include package readmes and source before installation, the worker
+  installs the shared API package, and the API applies migrations before accepting work.
+  Compose has a separate rq-scheduler dispatcher and an internal server-rendering API URL.
+  Scheduled IDs use RQ-compatible dashes; the old colon-separated IDs failed validation
+  with the installed RQ 2.12. The API now declares RQ so its enqueue endpoints can work.
+  Local previews default to a shared volume; `PREVIEW_LOCAL_DIRECTORY` supports that path.
+  The Python Azure SDK requires a full connection string, so `.env.example` leaves it empty.
+- `app.cli.sample` / `app.services.samples` add bounded real-FITS runs and isolated metadata
+  benchmarks. `scripts/start-local.ps1` launches the native API and frontend with logs.
+
+### Measured results
+
+Python 3.13 on this Windows machine, SQLite in memory, 10 synthetic products per
+observation. Single measurements, without network, watchlists, AI, or queueing. These
+are functional/performance smoke tests, not capacity projections or production throughput.
+
+| Products | Initial ingest | Replay | Replay SQL statements | Replay inserts |
+|---:|---:|---:|---:|---:|
+| 100 | 0.0415 s | 0.0139 s | 31 | 0 |
+| 1,000 | 0.2536 s | 0.1384 s | 301 | 0 |
+| 10,000 | 2.5461 s | 1.7103 s | 3,001 | 0 |
+
+Real FITS sample: saved product IDs 13, 20, and 27 (program 1193; Fomalhaut/Vega
+NIRCam coronagraphic images), 25,320,960 bytes total. All three produced full + thumbnail
+PNGs and deterministic image measurements. One download per file; no AI calls. Replay
+downloaded zero bytes. The feed and product 27's preview/measurements rendered in the
+local browser. API: 258 tests passed; worker: 4 tests passed; both Ruff checks pass;
+frontend production build, lint, and type checking pass. Alembic upgrade and schema
+drift check pass. Docker is not installed here, so container startup remains unverified.
+The separate live one-observation MAST catalog dry run stalled and was cancelled; server
+paging is covered by regression tests but that live catalog check is unverified. Cloud
+path lookup and the three anonymous S3 downloads did succeed.
+
+### Work required before archive-wide operation
+
+1. Incremental ingestion with durable release-time checkpoints, overlap windows, and
+   resumable backfills. MAST currently samples page 1; S3 samples the first prefix page(s)
+   each run. Neither is a complete archive change detector. Product lists for individual
+   observations can still be large.
+2. A transactional outbox between DB commits and queue delivery, idempotent consumers,
+   retry/dead-letter handling, and backpressure. Existing ingest/analysis enqueue inside
+   their DB transaction; a fast worker can race the commit. The local sample bypasses RQ.
+3. Chunked/range FITS access or tiled derivatives, decoded-array memory limits, and
+   bounded scratch storage. Ordinary separate preview/analysis jobs still download twice;
+   only `sample run` currently shares one download. Keep bulk computation near source data
+   and move compact products/measurements to Azure when appropriate.
+4. Partitioned metadata, database-native bulk upserts, cursor pagination instead of deep
+   offsets and repeated total counts, then PostgreSQL load tests with realistic indexes,
+   concurrency, watchlists, and data distributions.
+5. Authentication/authorization for admin and write endpoints before public deployment;
+   rate/byte/job budgets, observability, retention and verified Blob access policies.
+
+Grow tests in stages: 100k/1M metadata rows in PostgreSQL; mixed image/spectrum/cube
+corpora with measured peak RAM and byte budgets; then concurrent workers under failures,
+restarts, queue saturation and replay. No exabyte capacity extrapolation from these timings.
+
+## 14. Cloud model selection (2026-10-01)
+
+- Added per-request `cloud_model=gpt-6.1-sol|claude-opus-5-5` for cloud summaries
+  and reviews. It passes from the UI through API validation and RQ into the worker;
+  settings are copied per call and the configured default is preserved. Report
+  identity includes the model, so comparing models does not overwrite either report.
+- Added the Anthropic Messages adapter and SDK dependency. Opus 5.5 uses
+  `output_config.format` for JSON Schema, with effort and no temperature. Thinking
+  blocks are excluded from the report. GPT-6.1 Sol uses Chat Completions with
+  `max_completion_tokens`, reasoning effort, JSON Schema, and no temperature.
+  Truncation is retryable; refusal and invalid credentials are permanent failures.
+- New models use `CLOUD_AI_REASONING_MAX_TOKENS=8192` (reasoning plus final output)
+  and `CLOUD_AI_REASONING_EFFORT=medium`. Older configured models keep the existing
+  1,536-token budget. Standard input/output estimates per million tokens are
+  $2/$10 for Sol and $4/$20 for Opus, verified against the official model pages
+  linked in [local setup](local-dev-without-docker.md#5-cloud-model-choices).
+  Estimates do not account for cache discounts or special service tiers.
+- The model-options endpoint exposes readiness booleans only. Missing keys,
+  disabled cloud generation, unavailable estimates, and missing prerequisite
+  analysis/local summaries disable the corresponding UI action.
+- Validation: 280 API + worker tests pass, including real SDK serialization through
+  mock transports, model-specific pricing/budgets, HTTP-to-queue model propagation,
+  and separate persisted reports. Ruff and the web production build (including lint
+  and type checks) pass. No paid cloud calls or live Redis worker execution were tested.
+
+### Local output smoke test
+
+Product 27 (Vega, NIRCam F444W) was processed through the real local report job with
+the already-installed Ollama `llama3.2:3b` model. The process used
+`LOCAL_AI_ENABLE=true`, `LOCAL_AI_MODEL=llama3.2:3b`, `LOCAL_AI_MAX_TOKENS=1536`,
+and a 180-second request timeout; cloud generation stayed disabled. Calling
+`generate_ai_report_for_product(27, mode="local")` directly exercised the same job
+used by the worker without requiring Redis. These were process-only settings.
+
+The run took 60.52 seconds and incurred no paid API charges. Its JSON passed schema
+validation, persisted in the local database, and rendered on the product page.
+Reported dimensions, background statistics, date, target, instrument, filter, and
+file size agreed with the input (allowing rounding). The report correctly described
+the source count as a coarse connected-components estimate, but incorrectly used
+that count as evidence for a "Vega Target" feature. This demonstrates a semantic
+quality gap that schema validation alone cannot catch; the source of the target
+identity is archive metadata. Strengthen evidence checks before paid batch runs.
+This test does not establish Opus/Sol output quality. The raw report, its inputs,
+screenshots, SQLite database, and downloaded samples remain ignored local artifacts.
+
+## 15. Exoplanet Portrait Atlas prototype (2026-10-18)
+
+Design source: [project plan section 20](../webbwatch_ai_project_plan.md#20-exoplanet-portrait-atlas-2026-10-18).
+The user requested a runnable prototype as well as the roadmap addition.
+
+- `app/clients/exoplanets.py`: read-only NASA TAP `pscomppars` snapshot, count checks
+  before/after, duplicate-name rejection, 60-second request timeout and 32 MiB response
+  budget. Fetching metadata is independent of the JWST MAST/S3 ingestion path.
+- `app/services/exoplanets.py`: pure catalog scoring, shared ranks for ties, parameter
+  provenance and portrait-brief generation. No AI calls. Published spectra earn
+  presence/type credit; planned observations, calculated parameters and minimum masses
+  earn no measurement credit. Missing errors reduce parameter credit. This is an
+  availability proxy, not a validated appearance score or uncertainty probability.
+- `app/cli/exoplanets.py`: `rank --live` or `rank --catalog <snapshot>` writes all
+  rows to JSON/CSV with a manifest. `--top` affects console display only. `prompt`
+  exports the structured brief plus prompt text. Every output directory must be new.
+- `packages/shared/examples/hd189733b-appearance.json`: sourced pilot evidence separating
+  published reflectance constraints, inferred hue and illustrative cloud texture.
+  `prompt --evidence` validates planet identity and source fields; it does not automatically
+  verify scientific claims or modify catalog rankings.
+- `tests/test_exoplanets.py`: provenance/limit handling, missing data, count changes,
+  download bounds, ties, offline replay, snapshot hashes and evidence/prompt behavior.
+
+Live run on October 18 (America/Los_Angeles): **6,451 confirmed planets**, **293 with
+at least one listed spectrum**, and **79 tied at score 100**. These counts describe this
+archive snapshot, not all spectroscopy known to astronomy. The coarse top tier includes
+HD 189733 b, WASP-43 b, WASP-39 b and WASP-121 b. All rows still mark appearance as
+unassessed. Preserve ties until actual spectrum/phase-curve enrichment can distinguish
+targets. Final live artifacts are under ignored `data/exoplanets/2026-10-18-v1/`.
+
+Validation: 20 new tests pass; the complete API suite passes **296 tests** (one expected
+Astropy warning for synthetic invalid pixels), and changed Python files pass Ruff.
+The full suite needed execution outside the Windows sandbox after existing TestClient
+tests stalled inside it. A real offline replay reproduced the entire live ranking
+byte-for-byte; snapshot and portrait hashes were verified against the saved catalog.
+The HD 189733 b evidence-informed prompt is in `hd189733b-portrait/` under the final snapshot.
+
+The initial CLI milestone added no migrations, API routes, frontend pages, worker schedules,
+physical atmosphere models, or image-generation providers. Section 16 adds the first
+frontend example. Next: join published spectrum metadata and
+public observation status, reconcile parameter sets, then assess visible and infrared
+appearance separately. Keep generated imagery out of measured-preview artifacts.
+
+## 16. First portrait page and evidence panel (2026-10-18)
+
+The user supplied an image generated in ChatGPT from the exported HD 189733 b prompt
+and requested its integration into WebbWatch. The new `/exoplanets` page is linked by
+homepage navigation and a featured card.
+
+- `apps/web/public/portraits/hd-189733-b/original.png` is the user's full, unchanged
+  1254 × 1254 image. Its SHA-256 matches the supplied file. Preserve the original;
+  do not silently remove its labels or replace it with a newly generated image.
+- Adjacent `prompt.txt` and `evidence.json` are tracked public artifacts. The JSON
+  includes parameter references, uncertainty, snapshot hash and image provenance.
+  The local catalog path was removed before publication as a static asset.
+- `apps/web/lib/portraits.ts` derives displayed values and parameter citations from
+  that evidence JSON. This is a curated snapshot dated October 18, not a live API
+  query or an automatic literature review.
+- `app/exoplanets/page.tsx` displays the full image, download/prompt links and provenance.
+  `components/portrait-evidence.tsx` provides three accessible tabs: Measured, Inferred,
+  Illustrative, with arrow/Home/End keyboard navigation and linked claims. Scientific
+  claims link to papers; rendering assumptions link to the prompt and image.
+- Measured explicitly includes fitted parameters. Equilibrium temperature is Inferred;
+  cloud texture and virtual camera geometry are Illustrative. The page states that
+  the generated image's geometry has not been validated, and the generating model
+  is unknown. It never labels the output as an observation or a physical simulation.
+- The archive reference parser now accepts NASA's unquoted `href` attributes. A
+  regression test preserves the real Stassun reference format. The 21 exoplanet tests
+  and Ruff pass. The production web build includes route, TypeScript and lint checks.
+
+The page and its static assets work independently of the backend. Broader feed pages
+still require the existing API. No database/API changes or automatic generation were
+needed for this example. To add another portrait, retain its image and reproducible
+evidence bundle, then extend the curated portrait data model and UI deliberately.
+
+## 17. Ranked catalog and per-planet prompts (2026-10-18)
+
+The user requested a browsable ranking to choose the next image target and obtain its
+prompt with supporting evidence. `/exoplanets/catalog` adds a server-rendered catalog;
+`/exoplanets/catalog/[id]` provides score breakdown, source-linked Measured / Inferred /
+Illustrative tabs, copy/download prompt and evidence download. Homepage and first-portrait
+navigation link to the catalog. Filters (planet/host, discovery facility, spectrum type,
+minimum score) and pagination are encoded in the URL; ranks remain global and tied.
+
+- `app/services/exoplanet_catalog.py` loads a bundled compressed snapshot once per API
+  process, verifies SHA-256 and count, and shares `rank_catalog` / `build_portrait_brief`
+  with the CLI. IDs combine a readable name and hash, avoiding punctuation collisions.
+- `app/catalog_snapshots/exoplanets/` is tracked, approximately 660 KiB compressed.
+  The source is the previous 6,451-planet snapshot: 293 with listed spectra; 79 tied at 100.
+  UTC retrieval was October 19, 03:01 (October 18 Pacific). No live refresh is implied.
+- `exoplanets bundle --snapshot-dir ... --output-dir <new-directory> [--evidence ...]`
+  creates a deployable bundle. It verifies the source, validates the appearance planet
+  and citations, removes filesystem paths from public metadata, and refuses overwrite.
+  Review and replace the bundled files deliberately, then restart the API to clear cache.
+- `GET /api/exoplanets`: bounded search/filter/pagination; `GET /api/exoplanets/{id}`:
+  ranking, structured brief, prompt, references, uncertainties and snapshot provenance.
+  Unknown IDs return 404; unavailable/corrupt snapshots return 503. No DB/migration,
+  Redis, outbound archive request or AI call is involved in browsing.
+- Catalog pages use the existing API URL configuration and 60-second Next fetch cache.
+  Loading, empty and API-unavailable states are explicit. The original `/exoplanets`
+  image page remains independent of the backend.
+- `planet-portrait-v2` adds parameter source URLs and preserves full numeric precision.
+  The web export appends retrieval date/hash and NASA planet link. The original static
+  HD 189733 b image and prompt remain unchanged. Only that target has curated appearance
+  evidence; other prompts default to neutral gray, with unsupported details excluded.
+  Radius limits/missing data prohibit a scaled portrait; calculated radii remain model
+  inputs and are shown under Inferred, never given measurement credit.
+
+Validation includes API filters, tied ranks across pages, missing data, prompt citations,
+precision, identity isolation, safe public metadata, bundle integrity and failure paths.
+All 6,451 scores/ranks reproduce the prior saved ranking. Every detail brief was generated
+successfully: 6,393 catalog-only, one curated appearance example, 57 unsuitable for scaling.
+The production frontend build passes, all **304 API tests** pass (one expected Astropy
+warning for synthetic invalid pixels), and changed Python files pass Ruff. Browser
+checks cover catalog navigation, filtering, selection, copying, prompt download and
+evidence tab keyboard controls. The 28 catalog tests include the precision regression.
+
+## 18. LTT 9779 b: second generated portrait (2026-10-19 UTC)
+
+The user asked us to choose the best next target, gather evidence, generate its image
+and add a second example. LTT 9779 b was selected from the 79 tied score-100 planets
+for optical reflected-light evidence, JWST phase-curve asymmetry, and its TESS discovery.
+This is a curated target choice, not a scientifically calibrated reordering of the ties.
+
+- `packages/shared/examples/ltt9779b-appearance.json` separates observed/fitted constraints,
+  model interpretations and rendering assumptions. Sources include Saha et al. 2025
+  (CHEOPS albedo 0.73 ± 0.11), Coulombe et al. 2025 (JWST phase asymmetry), Borsa 2026
+  (ESPRESSO reflected light), Radica et al. 2025 (Hubble upper limit, not a detection),
+  and Stamer et al. September 2026 (cloud-composition uncertainty; preprint in review).
+  Different bandpasses/model albedos are not averaged; exact RGB remains unknown.
+- `app/catalog_snapshots/exoplanets/appearance.json` now stores two validated objects.
+  The catalog accepts a single object for backward compatibility or a list. Duplicate
+  names and absent targets are rejected; evidence is matched by exact planet identity.
+  Appearance evidence does not affect ranks, scores or archive spectrum counts.
+- `planet-portrait-v3` supports a validated, explicitly labeled field-of-view override
+  in curated evidence. LTT 9779 b uses 15° at the same 384,400 km center distance and
+  60° phase; default remains 45°. Its catalog radius 4.72 ± 0.23 Earth radii implies
+  8.9735° angular diameter, approximately 59.6% of the 15° perspective frame width.
+- Images were created with the built-in imagegen tool, followed by one imagegen
+  framing edit after the first disk looked too large. No code-based image edits or
+  paid API fallback were used. The tool's model identifier was not exposed.
+- `apps/web/public/portraits/ltt-9779-b/` retains `original.png` (selected final),
+  `generation-v1.png` (edit input), `prompt.txt`, `refinement-prompt.txt`, and evidence
+  JSON with image/parameter provenance, file hashes and the two generation stages.
+  Final image SHA-256: `a755c1f8ec1412971e29dc31b5b218edf2caba36ebefce84be06ea3bd3c62017`.
+  Visual checks cover subject, labels, exclusions and approximate framing; illumination,
+  photometry and geometry are not validated. Keep that qualification beside the image.
+- `/exoplanets/portraits/ltt-9779-b` is static and works without the API. The shared
+  portrait selector links both examples. Homepage and catalog detail link to the new
+  page; its Measured/Inferred/Illustrative panel links the actual publications and
+  retains the Hubble limit and preprint status. The first image and prompt stay unchanged.
+- Added tests for multiple-planet isolation, duplicate/absent evidence, unchanged scores,
+  saved brief consistency, default/narrower camera framing and invalid field of view.
+  All 37 targeted catalog tests, Ruff and the production web build pass. Browser checks
+  confirmed all three evidence tabs, keyboard navigation, the catalog's curated prompt
+  and the return link to portrait 002. Preview: `.cache/ltt-9779-b-webbwatch-preview.png`.
+  No new database or background jobs.
+
+## 19. Generate and retain a planet portrait in WebbWatch (2026-10-19)
+
+The catalog detail page now has a Generate image panel and recent version links.
+`/exoplanets/generated` is the paginated archive; `/exoplanets/generated/[id]` shows
+progress, the saved image, prompt, source-linked Measured/Inferred/Illustrative evidence,
+downloads and hashes. These are separate from the two preserved curated examples.
+
+- Migration `640380870d07` adds `planet_portraits`. Each request UUID is an idempotency
+  key. The database stores the exact prompt, its SHA-256, full catalog detail, evidence
+  groups and their schema version, model and generation settings before starting work.
+  Later catalog edits do not reclassify or overwrite this history. Provider-revised
+  prompts and usage, when returned, are recorded separately from the submitted prompt.
+- `POST /api/planet-portraits` accepts only a catalog ID, request UUID and prompt hash.
+  The server reconstructs the brief, rejects stale hashes and missing usable radii,
+  and never trusts user-supplied scientific claims. `GET /config`, list/detail and
+  `/image`, `/prompt`, `/evidence` routes serve configuration, history and downloads.
+- OpenAI Images API, `gpt-image-2.5-sunburst` by default, one medium-quality 1024×1024 PNG.
+  `OPENAI_API_KEY` stays server-side; `PORTRAIT_GENERATION_ENABLE` gates paid work
+  independently of cloud text reports. The UI shows model, size, quality and paid-use
+  notice before submission. No API keys are returned or raw provider errors persisted.
+  Official contract: https://developers.openai.com/api/docs/guides/image-generation
+- BackgroundTasks runs the sync job in the API process with its own DB sessions.
+  A unique nullable active-slot column permits one generation at a time across processes.
+  The worker claims queued rows conditionally; repeated request IDs never replay a call.
+  SDK retries are disabled. A lost process/request becomes interrupted after its saved
+  deadline (provider timeout plus 120 seconds), without automatic resubmission or spend.
+  This is a local prototype, not a durable distributed job queue.
+- Paid writes require development environment, a loopback client, action header and
+  an allowed Origin. Production/remote writes are disabled until authentication and
+  a durable deployment are added. CORS alone is not treated as authentication.
+- Existing local/Azure preview storage saves `planet-portraits/<uuid>/image.png`,
+  `prompt.txt` and `evidence.json`. Local default is `services/api/preview_cache/`.
+  Back up storage and DB together. Partial failures preserve the DB brief; no completed
+  image is advertised until the image and sidecar have been saved. Output bytes are
+  validated as a 1024-square PNG and hashed, not scientifically validated.
+- Most planets still use a neutral-gray scenario. No live literature enrichment,
+  physical rendering or new appearance ranking is implied by this generation feature.
+- Validation: 328 API tests pass (15 new generation cases), Ruff passes and Next's
+  production build passes. Mock-provider tests cover output persistence, snapshot
+  immutability, source/limit classification, replay, busy/expired jobs, provider and
+  storage failures, secret redaction, write gates, and paginated history.
+- Local setup: the user added their OpenAI key; access to the configured image model
+  was verified without generation. Enabled the portrait flag and replaced only the
+  sample Docker `DATABASE_URL` with the existing local SQLite database, then migrated.
+  No keys were printed. API and web servers remain on loopback ports 8000/3000.
+- With explicit user approval for one test up to $1, the actual Generate image button
+  completed LTT 9779 b generation `aa47fc61-67dc-415a-adf7-4061eea1dd3a`. The file-backed
+  saved record, image, prompt and evidence hashes were verified. Usage: 1,973 text input
+  tokens and 439 image output tokens; estimated $0.023035 at the documented rates of
+  $5/M text input and $30/M image output (not an invoice). No retries or extra images.
+  Browser checks verified progress, completion, all evidence tabs/keyboard navigation,
+  history navigation and reload persistence, with no console warnings/errors.
+  Screenshot: `.cache/portrait-generation-complete.png`.
+
+## 20. Portrait previews in the catalog (2026-10-19)
+
+- Catalog detail pages show a 256px preview above the generation controls. Polling
+  replaces it when a generation completes. The ranked table has a 64px Image column.
+  Both link to the exact saved version with its prompt and evidence, with the
+  original curated examples as fallbacks when no completed saved version exists.
+- `GET /api/planet-portraits/latest?planet_id=...` accepts up to 100 repeated IDs.
+  One window-function query selects the newest completed version for each planet
+  by creation time (ID breaks timestamp ties), without loading prompt/evidence blobs.
+  Newer failed, interrupted or active attempts do not hide an older completed image;
+  the selection is independent of history pagination.
+- `GET /api/planet-portraits/{id}/thumbnail` returns a 256px WebP derivative with
+  private 24-hour browser caching. It preserves the complete frame and aspect ratio,
+  leaving original image bytes and evidence unchanged. For the current 55 Cnc e
+  image, the derivative is 8,520 bytes versus the 1,276,123-byte original PNG.
+- Table previews use one uncached batch lookup per results page, with a bounded
+  timeout and graceful fallback. The frozen catalog still renders if the portrait
+  database is unavailable. Reading previews does not require a key or generation flag.
+- Validation: 27 focused portrait/catalog API tests pass, including version selection
+  beyond the recent-history window, query bounds, thumbnail dimensions/full frame,
+  original preservation and storage errors. Ruff and the Next production build pass.
+  Browser verification covers the 55 Cnc e preview, saved-evidence destination and
+  table thumbnail. Screenshots: `.cache/catalog-planet-preview.png` and
+  `.cache/catalog-ranked-thumbnails.png`. This change made no paid image calls.

@@ -1,0 +1,119 @@
+[
+  {
+    "planet": "HD 189733 b",
+    "evidence_version": "hd189733b-visible-v1",
+    "source_checked_on": "2026-10-18",
+    "scope": "Illustrative evidence extraction from Evans et al. 2013, not an exhaustive literature review or atmospheric retrieval.",
+    "claims": [
+      {
+        "kind": "reported_constraint",
+        "text": "Hubble/STIS secondary-eclipse measurements give geometric albedo 0.40 +/- 0.12 at 290-450 nm and an upper bound of 0.12 at 450-570 nm at 1-sigma. These are broad wavelength constraints, not an RGB photograph.",
+        "source_url": "https://doi.org/10.1088/2041-8205/772/2/L16"
+      },
+      {
+        "kind": "model_inference",
+        "text": "The published best-fit reflectance suggests a deep-blue visible appearance. Reflective dayside clouds and absorption at longer wavelengths are an interpretation; exact cloud structures are unresolved.",
+        "source_url": "https://arxiv.org/abs/1307.3239"
+      },
+      {
+        "kind": "rendering_assumption",
+        "text": "Illustrate a deep-blue gas-giant atmosphere with subdued, soft cloud texture, gentle limb haze, and physically consistent spherical shading. Any mottling or broad flow-like texture is illustrative and must not be presented as measured storms. No solid surface, oceans, continents, rings, or moons. Use a black background and a planet-exposed camera. Render detailed light scattering and shading without implying resolved geographic detail."
+      }
+    ]
+  },
+  {
+    "planet": "LTT 9779 b",
+    "evidence_version": "ltt9779b-visible-v1",
+    "source_checked_on": "2026-10-19",
+    "scope": "Targeted literature review for a hypothetical visible-light portrait. Published results are summarized, not independently re-reduced. The September 2026 transmission study is a preprint in review. Different bandpasses and model assumptions must not be averaged into one albedo or exact RGB color.",
+    "selection": {
+      "catalog_rank": 1,
+      "catalog_score": 100,
+      "top_tied_count": 79,
+      "reason": "Chosen among the top-score ties for repeated optical reflected-light measurements, JWST phase-resolved reflectance, a TESS discovery, and a useful visual contrast to the first HD 189733 b example. This is an editorial next-target choice, not a new validated ranking of appearance confidence.",
+      "compared_targets": [
+        "HD 189733 b",
+        "WASP-39 b",
+        "WASP-43 b",
+        "HD 209458 b"
+      ]
+    },
+    "rendering_horizontal_fov_degrees": 15,
+    "claims": [
+      {
+        "kind": "reported_constraint",
+        "title": "CHEOPS optical eclipses",
+        "value": "89.9 ± 13.7 ppm · geometric albedo 0.73 ± 0.11",
+        "text": "Saha et al. (2025) analyzed 20 CHEOPS eclipses. Their DRP reduction gives an eclipse depth of 89.9 +/- 13.7 ppm and a derived geometric albedo of 0.73 +/- 0.11; an independent PIPE reduction is consistent. This is a broad optical-band result, not a literal 73% of all incident energy or a calibrated color image.",
+        "source_label": "Saha et al. 2025 · CHEOPS + TESS",
+        "source_url": "https://arxiv.org/abs/2506.17550"
+      },
+      {
+        "kind": "reported_constraint",
+        "title": "JWST reflected-light asymmetry",
+        "value": "3.1σ asymmetry · full-orbit NIRISS/SOSS observations",
+        "text": "Coulombe et al. (2025) report a 3.1-sigma asymmetric dayside reflected-light signal from a full-orbit 0.6-2.8 micrometer phase curve. The measurements constrain large-scale brightness, not resolved cloud shapes.",
+        "source_label": "Coulombe et al. 2025 · JWST",
+        "source_url": "https://arxiv.org/abs/2501.14016"
+      },
+      {
+        "kind": "reported_constraint",
+        "title": "Independent reflected-light detection",
+        "value": "102 +29/−30 ppm · ESPRESSO, 380–770 nm",
+        "text": "Borsa (2026) reports reflected light at signal-to-noise about 5.4 with ESPRESSO, with planet-to-star flux ratio 102 (+29/-30) ppm across 380-770 nm. Enhanced blue reflectivity is reported, but the paper does not recover a detailed reflected-light spectrum or an exact visible color.",
+        "source_label": "Borsa 2026 · ESPRESSO",
+        "source_url": "https://arxiv.org/abs/2606.30793"
+      },
+      {
+        "kind": "reported_constraint",
+        "title": "A Hubble non-detection also matters",
+        "value": "Eclipse depth <113 ppm · 3σ, 0.2–0.8 μm",
+        "text": "Radica et al. (2025) did not definitively detect an eclipse with HST/WFC3 UVIS and report an injection-recovery 3-sigma upper limit of 113 ppm over 0.2-0.8 micrometers. Preserve this as a limit, not another positive detection.",
+        "source_label": "Radica et al. 2025 · Hubble/WFC3",
+        "source_url": "https://arxiv.org/abs/2503.05581"
+      },
+      {
+        "kind": "model_inference",
+        "title": "A brighter, cloudier western dayside",
+        "value": "Model albedos: west 0.79 ± 0.15; east 0.41 ± 0.10",
+        "text": "The JWST phase-curve model favors a brighter western dayside and a darker eastern dayside, with regional albedos 0.79 +/- 0.15 and 0.41 +/- 0.10, respectively. Reflective white clouds, plausibly silicate condensates, are a physical interpretation. These regional values are band- and model-dependent; do not equate or average them with the CHEOPS optical albedo. This is not a resolved weather map.",
+        "source_label": "Coulombe et al. 2025 · model interpretation",
+        "source_url": "https://arxiv.org/abs/2501.14016"
+      },
+      {
+        "kind": "model_inference",
+        "title": "Cloud species remain uncertain",
+        "text": "Stamer et al. (September 2026 preprint, in review) fit combined 0.63-5.165 micrometer JWST transmission data with cloud and metallicity degeneracies. They identify mid-infrared silicate features as a needed test of cloud composition. The illustration must not present glass, titanium, metallic rain or any particular condensate as a directly observed substance.",
+        "source_label": "Stamer et al. 2026 · preprint, in review",
+        "source_url": "https://arxiv.org/abs/2609.36206"
+      },
+      {
+        "kind": "rendering_assumption",
+        "title": "Reflective atmosphere, illustrative texture",
+        "text": "Render a luminous pearl-white to very pale cool-gray atmosphere, with subtle warm-gray shading and soft, fine cloud texture. A broad brighter cloud-rich sector fading gradually into a less reflective sector is an illustrative interpretation of the large-scale asymmetry; do not label screen coordinates as a recovered longitude map. Exact RGB, cloud shapes, swirls and limb haze are illustrative. Use diffuse atmospheric reflection, never a chrome or solid-metal surface. No oceans, continents, rings, moons, lightning, sharp hurricane eyes, glass shards or glitter. No thermal false color or red glow on the nightside. Use a black, starless background. The star is outside the frame; light arrives from the upper left, with a 60-degree phase angle and approximately 75% illuminated disk area. No additional moons or objects."
+      },
+      {
+        "kind": "rendering_assumption",
+        "title": "Labeled close framing",
+        "text": "Use the same 384400 km center-to-camera distance as the first portrait. This smaller planet is shown with an explicitly labeled 15-degree horizontal field of view instead of the atlas default 45 degrees. Its 4.72-Earth-radius catalog estimate implies an angular diameter of about 8.97 degrees and a disk diameter about 60% of a square perspective frame. Put the whole disk in frame; do not silently enlarge it. Requested geometry is not a validated simulation."
+      },
+      {
+        "kind": "rendering_assumption",
+        "title": "Poster layout and labels",
+        "text": "Create a polished square scientific illustration for WebbWatch, with the complete globe near the center and restrained white typography in the black margins. Place the title 'LTT 9779 b' at the top, followed by 'HYPOTHETICAL · EVIDENCE-INFORMED ILLUSTRATION'. At the bottom use these exact lines: '384,400 km from center · 15° horizontal field of view'; '60° phase · Narrower framing than the atlas default'; 'Cloud interpretation: model-informed · Color and texture: illustrative'; 'Hypothetical illustration — not an observed photograph.' Keep all text outside the globe, legible and uncropped. Do not add institution logos, a source watermark, a scale bar or any additional numerical claims."
+      }
+    ],
+    "supporting_data": [
+      {
+        "label": "Published JWST phase-curve data and models",
+        "url": "https://zenodo.org/records/14232524",
+        "access": "Repository inspected; files not reanalyzed"
+      },
+      {
+        "label": "NASA catalog parameter source: Jenkins et al. 2020",
+        "url": "https://ui.adsabs.harvard.edu/abs/2020NatAs...4.1148J/abstract",
+        "access": "Parameter values retained from the pinned NASA catalog snapshot"
+      }
+    ]
+  }
+]

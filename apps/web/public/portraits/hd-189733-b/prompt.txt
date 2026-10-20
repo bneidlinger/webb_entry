@@ -1,0 +1,31 @@
+Create an explicitly labeled, hypothetical illustration of HD 189733 b. This is a catalog-based scenario, not a reconstructed photograph or physical simulation. The following numerical constraints are catalog estimates; calculated values, limits, and minimum masses are not independent measurements.
+
+Planet radius: 12.6662 Earth radii; reported_with_uncertainty; uncertainties +0.11209/(-0.11209); limit flag 0.0.
+Planet mass: 359.148 Earth masses; reported_with_uncertainty; uncertainties +25.4264/(-25.4264); limit flag 0.0.
+Orbital period: 2.21858 days; reported_with_uncertainty; uncertainties +1.5e-07/(-1.5e-07); limit flag 0.0.
+Orbital semi-major axis: 0.03126 AU; reported_with_uncertainty; uncertainties +0.00036/(-0.00036); limit flag 0.0.
+Equilibrium temperature estimate: 1209 K; reported_with_uncertainty; uncertainties +11.0/(-11.0); limit flag 0.0.
+Host effective temperature: 5052 K; reported_with_uncertainty; uncertainties +16.0/(-16.0); limit flag 0.0.
+Host radius: 0.75 Solar radii; reported_with_uncertainty; uncertainties +0.01/(-0.01); limit flag 0.0.
+
+Rendering assumptions:
+Virtual camera 384400 km from planet center; this does not imply a moon or stable orbit.
+Phase angle 60 degrees; 45-degree horizontal field of view; square frame.
+Visible-light illustration with neutral display white balance; exact RGB is not measured.
+Use a neutral-gray disk unless the supplied appearance evidence supports a different hue.
+Any zoom/crop must be labeled; physical viewing distance alone does not set image scale.
+Planet angular diameter: 24.2362 degrees in the stated frame.
+
+Unknowns:
+Without additional evidence, true color is unknown; exact RGB and cloud geography remain unknown.
+Surface type, continents, oceans, terrain, rings, moons and local weather patterns.
+Rotation, obliquity and spatial brightness maps unless independently sourced later.
+Equilibrium temperature is a model estimate, not measured surface temperature.
+Spectral counts do not establish detection of an atmosphere or any molecule.
+
+Supplied appearance evidence (not independently verified by this tool):
+[reported_constraint] Hubble/STIS secondary-eclipse measurements give geometric albedo 0.40 +/- 0.12 at 290-450 nm and an upper bound of 0.12 at 450-570 nm at 1-sigma. These are broad wavelength constraints, not an RGB photograph. Source: https://doi.org/10.1088/2041-8205/772/2/L16
+[model_inference] The published best-fit reflectance suggests a deep-blue visible appearance. Reflective dayside clouds and absorption at longer wavelengths are an interpretation; exact cloud structures are unresolved. Source: https://arxiv.org/abs/1307.3239
+[rendering_assumption] Illustrate a deep-blue gas-giant atmosphere with subdued, soft cloud texture, gentle limb haze, and physically consistent spherical shading. Any mottling or broad flow-like texture is illustrative and must not be presented as measured storms. No solid surface, oceans, continents, rings, or moons. Use a black background and a planet-exposed camera. Render detailed light scattering and shading without implying resolved geographic detail. Source: scenario choice
+
+Do not invent detailed features as observations. Do not infer visible colors from infrared observations or a surface from equilibrium temperature. Use no rings, moons, cities, vegetation, continents, storms, or ocean textures without separately supplied evidence or an explicitly labeled scenario. Specific texture, cloud shapes, and weather must remain labeled rendering assumptions. Caption: Hypothetical illustration; detailed appearance is not observed.

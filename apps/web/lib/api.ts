@@ -1,4 +1,6 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const API_BASE = process.env.API_INTERNAL_URL
+  ?? process.env.NEXT_PUBLIC_API_BASE_URL
+  ?? "http://localhost:8000";
 
 export interface HealthPayload {
   status: string;
@@ -186,6 +188,116 @@ export async function getProductAnalyses(id: number): Promise<Result<AnalysisRea
     });
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
     const data = (await res.json()) as AnalysisRead[];
+    return { ok: true, data };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5: local AI reports (interpretation over the deterministic measurements)
+
+export interface MeasuredFact {
+  name: string;
+  value: string;
+  source: string; // "metadata" | "header" | "computed"
+}
+
+export interface InterestingFeature {
+  feature: string;
+  evidence: string;
+  confidence: string; // "low" | "medium" | "high"
+}
+
+export interface QualityFlag {
+  flag: string;
+  severity: string; // "info" | "warning" | "critical"
+  details: string;
+}
+
+export interface AiReport {
+  summary: string;
+  measured_facts: MeasuredFact[];
+  interesting_features: InterestingFeature[];
+  quality_flags: QualityFlag[];
+  recommended_next_steps: string[];
+  human_validation_required: boolean;
+  tags: string[];
+  model_notes?: {
+    model?: string;
+    prompt_version?: string;
+    mode?: string;
+    created_at?: string;
+  };
+}
+
+export interface AiReportRead {
+  id: number;
+  data_product_id: number;
+  mode: string;
+  model_name: string;
+  prompt_version: string;
+  report_json: AiReport | null;
+  generated_at: string | null;
+  last_error: string | null;
+  is_permanent_failure: boolean;
+  cost_estimate: number | null;
+}
+
+export async function getProductAiReports(id: number): Promise<Result<AiReportRead[]>> {
+  try {
+    const res = await fetch(`${API_BASE}/api/products/${id}/ai-reports`, {
+      next: { revalidate: 30 },
+    });
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const data = (await res.json()) as AiReportRead[];
+    return { ok: true, data };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+// Phase 6: pre-run cost estimate for a cloud report mode ("cloud" | "cloud_review").
+export interface CostEstimateResponse {
+  available: boolean;
+  mode?: string | null;
+  model?: string | null;
+  currency?: string | null;
+  estimate_usd?: number | null;
+  reason?: string | null;
+}
+
+export interface CloudModelOption {
+  id: string;
+  label: string;
+  provider: string;
+  configured: boolean;
+  enabled: boolean;
+}
+
+export async function getCloudModels(id: number): Promise<Result<CloudModelOption[]>> {
+  try {
+    const res = await fetch(`${API_BASE}/api/products/${id}/ai-reports/cloud-models`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    return { ok: true, data: (await res.json()) as CloudModelOption[] };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+export async function getAiCostEstimate(
+  id: number,
+  mode: string,
+): Promise<Result<CostEstimateResponse>> {
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/products/${id}/ai-reports/cost-estimate?mode=${mode}`,
+      { next: { revalidate: 30 } },
+    );
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const data = (await res.json()) as CostEstimateResponse;
     return { ok: true, data };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };

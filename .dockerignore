@@ -1,0 +1,15 @@
+.git
+**/.venv
+**/node_modules
+**/.next
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/*.db
+**/*.fits
+**/*.fits.gz
+**/preview_cache
+**/.env
+**/.env.local
+logs
+data

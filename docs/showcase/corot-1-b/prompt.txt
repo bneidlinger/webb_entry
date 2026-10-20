@@ -1,0 +1,29 @@
+Create an explicitly labeled, hypothetical illustration of CoRoT-1 b. This is a catalog-based scenario, not a reconstructed photograph or physical simulation. The following numerical constraints are catalog estimates; calculated values, limits, and minimum masses are not independent measurements.
+
+Planet radius: 16.7 Earth radii; reported_with_uncertainty; uncertainties +0.9/(-0.9); limit flag 0.0. Reference: Barge et al. 2008; sources: https://ui.adsabs.harvard.edu/abs/2008A&A...482L..17B/abstract.
+Planet mass: 327.35 Earth masses; reported_with_uncertainty; uncertainties +38.14/(-38.14); limit flag 0.0. Reference: Barge et al. 2008; sources: https://ui.adsabs.harvard.edu/abs/2008A&A...482L..17B/abstract.
+Orbital period: 1.5089557 days; reported_with_uncertainty; uncertainties +6.4e-06/(-6.4e-06); limit flag 0.0. Reference: Barge et al. 2008; sources: https://ui.adsabs.harvard.edu/abs/2008A&A...482L..17B/abstract.
+Orbital semi-major axis: 0.02752 AU; reported_with_uncertainty; uncertainties +0.00022/(-0.00023); limit flag 0.0. Reference: Bonomo et al. 2017; sources: https://ui.adsabs.harvard.edu/abs/2017A&A...602A.107B/abstract.
+Equilibrium temperature estimate: 1898.0 K; reported_with_uncertainty; uncertainties +50.0/(-50.0); limit flag 0.0. Reference: Barge et al. 2008; sources: https://ui.adsabs.harvard.edu/abs/2008A&A...482L..17B/abstract.
+Host effective temperature: 5950.0 K; reported_with_uncertainty; uncertainties +150.0/(-150.0); limit flag 0.0. Reference: Barge et al. 2008; sources: https://ui.adsabs.harvard.edu/abs/2008A&A...482L..17B/abstract.
+Host radius: 1.11 Solar radii; reported_with_uncertainty; uncertainties +0.05/(-0.05); limit flag 0.0. Reference: Barge et al. 2008; sources: https://ui.adsabs.harvard.edu/abs/2008A&A...482L..17B/abstract.
+
+Rendering assumptions:
+Virtual camera 384400 km from planet center; this does not imply a moon or stable orbit.
+Phase angle 60 degrees; 45-degree horizontal field of view; square frame.
+Visible-light illustration with neutral display white balance; exact RGB is not measured.
+Use a neutral-gray disk unless the supplied appearance evidence supports a different hue.
+Any zoom/crop must be labeled; physical viewing distance alone does not set image scale.
+Planet angular diameter: 32.1367 degrees in the stated frame.
+
+Unknowns:
+Without additional evidence, true color is unknown; exact RGB and cloud geography remain unknown.
+Surface type, continents, oceans, terrain, rings, moons and local weather patterns.
+Rotation, obliquity and spatial brightness maps unless independently sourced later.
+Equilibrium temperature is a model estimate, not measured surface temperature.
+Spectral counts do not establish detection of an atmosphere or any molecule.
+
+Do not invent detailed features as observations. Do not infer visible colors from infrared observations or a surface from equilibrium temperature. Use no rings, moons, cities, vegetation, continents, storms, or ocean textures without separately supplied evidence or an explicitly labeled scenario. Specific texture, cloud shapes, and weather must remain labeled rendering assumptions. Caption: Hypothetical illustration; detailed appearance is not observed.
+
+Evidence snapshot: 2026-10-19T03:01:59.025541+00:00. Catalog SHA-256: 27232137ec9669171b7a76243e0f2f053127fc9b358b1bf4cba7f51f44966f43.
+NASA archive: https://exoplanetarchive.ipac.caltech.edu/overview/CoRoT-1%20b

@@ -13,6 +13,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from itertools import batched
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -123,6 +124,16 @@ def ingest_observations(session: Session, observations: Iterable[MastObservation
         elif _apply_observation(obs, src_obs):
             result.observations_updated += 1
 
+        # Look up only this observation's input filenames in bounded queries.
+        # Avoid one SELECT per product, without loading the entire catalog.
+        existing_products: dict[str, DataProduct] = {}
+        filenames = dict.fromkeys(p.filename for p in src_obs.products)
+        for batch in batched(filenames, 500):
+            existing_products.update((p.filename, p) for p in session.scalars(
+                select(DataProduct).where(
+                    DataProduct.observation_id == obs.id, DataProduct.filename.in_(batch)
+                )
+            ))
         seen_filenames_this_batch: set[str] = set()
         for src_prod in src_obs.products:
             result.products_seen += 1
@@ -130,12 +141,7 @@ def ingest_observations(session: Session, observations: Iterable[MastObservation
                 # Same filename appeared twice in the upstream payload — skip the duplicate.
                 continue
 
-            prod = session.scalar(
-                select(DataProduct).where(
-                    DataProduct.observation_id == obs.id,
-                    DataProduct.filename == src_prod.filename,
-                )
-            )
+            prod = existing_products.get(src_prod.filename)
             if prod is None:
                 prod = DataProduct(
                     observation_id=obs.id,
@@ -150,9 +156,9 @@ def ingest_observations(session: Session, observations: Iterable[MastObservation
                     last_seen_at=now,
                 )
                 session.add(prod)
-                session.flush()  # need prod.id to FK from Alert
                 result.products_created += 1
                 if watchlists:
+                    session.flush()  # need prod.id to FK from Alert
                     new_alerts = evaluate_watchlists(session, prod, obs, watchlists)
                     result.alerts_created += len(new_alerts)
                     # Phase 3/4: only enqueue previews + analyses for watchlist-matched
@@ -167,5 +173,7 @@ def ingest_observations(session: Session, observations: Iterable[MastObservation
             else:
                 prod.last_seen_at = now
             seen_filenames_this_batch.add(src_prod.filename)
+        # A repeated observation later in this iterable must see these inserts.
+        session.flush()
 
     return result

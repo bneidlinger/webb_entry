@@ -120,6 +120,12 @@ class MastClient:
 
     OBS_COLLECTION = "JWST"
 
+    @staticmethod
+    def resolve_cloud_uri(mast_uri: str) -> str | None:
+        """Resolve a selected product through MAST instead of guessing its S3 path."""
+        Observations.enable_cloud_dataset(verbose=False)
+        return Observations.get_cloud_uri(mast_uri)
+
     def query_observations(
         self,
         *,
@@ -134,7 +140,11 @@ class MastClient:
         `get_products_for` so we keep the original row objects MAST needs for the
         product lookup.
         """
-        criteria: dict[str, Any] = {"obs_collection": self.OBS_COLLECTION}
+        if not 1 <= limit <= 10_000:
+            raise ValueError("limit must be between 1 and 10000")
+        criteria: dict[str, Any] = {
+            "obs_collection": self.OBS_COLLECTION, "dataRights": "PUBLIC"
+        }
         if instrument:
             # MAST stores instrument_name as e.g. "NIRCAM/IMAGE"; wildcard prefix-match.
             criteria["instrument_name"] = f"{instrument.upper()}*"
@@ -143,7 +153,8 @@ class MastClient:
         if target_name:
             criteria["target_name"] = target_name
 
-        table = Observations.query_criteria(**criteria)
+        # page is essential: pagesize alone still fetches every page.
+        table = Observations.query_criteria(pagesize=limit, page=1, **criteria)
         if limit and len(table) > limit:
             table = table[:limit]
         return table
