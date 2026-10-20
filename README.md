@@ -2,7 +2,36 @@
 
 A public-data discovery and analysis platform for the **James Webb Space Telescope (JWST)**. WebbWatch AI watches MAST and the AWS Open Data mirror for newly public data products, generates previews, runs a deterministic-first analysis pipeline with optional local and cloud AI review, and surfaces the results in a shareable feed.
 
+The **Exoplanet Portrait Atlas** adds a second way to explore: browse 6,451 confirmed
+planets ranked by available data, review a sourced image prompt, and generate a
+portrait with its **Measured / Inferred / Illustrative** evidence saved alongside it.
+
 See [`webbwatch_ai_project_plan.md`](./webbwatch_ai_project_plan.md) for the full design plan, schema, and roadmap.
+
+## Planet portrait showcase
+
+A few of the worlds we've started exploring. These are **AI-generated hypothetical
+illustrations**, not telescope photographs or validated physical simulations.
+Detailed appearance, rendering geometry and labels have not been independently
+validated. Click an image for the full-size version; the accompanying evidence
+separates published constraints from model interpretations and artistic choices.
+
+| HD 189733 b | LTT 9779 b |
+| :---: | :---: |
+| [![Hypothetical blue HD 189733 b portrait](apps/web/public/portraits/hd-189733-b/original.png)](apps/web/public/portraits/hd-189733-b/original.png) | [![Hypothetical bright, cloudy LTT 9779 b portrait](apps/web/public/portraits/ltt-9779-b/original.png)](apps/web/public/portraits/ltt-9779-b/original.png) |
+| Our first example: a blue-hue interpretation informed by Hubble reflectance evidence. Exact color and cloud texture remain illustrative. | A reflective-cloud interpretation informed by CHEOPS, JWST, Hubble and ESPRESSO evidence. Fine cloud structure remains illustrative. |
+| [Prompt](apps/web/public/portraits/hd-189733-b/prompt.txt) · [Evidence](apps/web/public/portraits/hd-189733-b/evidence.json) | [Prompt](apps/web/public/portraits/ltt-9779-b/prompt.txt) · [Framing refinement](apps/web/public/portraits/ltt-9779-b/refinement-prompt.txt) · [Evidence](apps/web/public/portraits/ltt-9779-b/evidence.json) |
+
+| 55 Cnc e | CoRoT-1 b |
+| :---: | :---: |
+| [![Hypothetical neutral-gray 55 Cnc e illustration generated in WebbWatch](docs/showcase/55-cnc-e/image.png)](docs/showcase/55-cnc-e/image.png) | [![Hypothetical neutral-gray CoRoT-1 b illustration generated in WebbWatch](docs/showcase/corot-1-b/image.png)](docs/showcase/corot-1-b/image.png) |
+| Generated directly in WebbWatch from catalog constraints. The depicted surface texture and star placement are artistic additions, not measured features. | Generated directly in WebbWatch from catalog constraints. The depicted atmospheric bands and star placement are artistic additions, not measured features. |
+| [Saved prompt](docs/showcase/55-cnc-e/prompt.txt) · [Saved evidence](docs/showcase/55-cnc-e/evidence.json) | [Saved prompt](docs/showcase/corot-1-b/prompt.txt) · [Saved evidence](docs/showcase/corot-1-b/evidence.json) |
+
+**Try it locally:** open `/exoplanets/catalog`, select a planet, review its prompt
+and evidence, then choose **Generate image**. Completed images appear on the planet
+page, in the ranked table, and in **Saved portraits**. See
+[generation setup](#generate-and-save-a-portrait-in-webbwatch) below.
 
 ## Stack
 

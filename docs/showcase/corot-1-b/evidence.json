@@ -1,0 +1,461 @@
+{
+  "schema_version": "portrait-showcase-v1",
+  "planet": "CoRoT-1 b",
+  "description": "Selected hypothetical illustration generated in WebbWatch.",
+  "image_provenance": {
+    "source_generation_id": "18710d38-73de-47ea-adf7-056ebb94fb1c",
+    "created_at_utc": "2026-10-20T03:07:09.535665Z",
+    "model": "gpt-image-2.5-sunburst",
+    "settings": {
+      "size": "1024x1024",
+      "quality": "medium",
+      "output_format": "png",
+      "n": 1
+    },
+    "width": 1024,
+    "height": 1024,
+    "image_sha256": "0096161a07725d13b97715f2d65d6c24d463b71a28169c884feb077db9b7cdb1",
+    "prompt_sha256": "8c4211183ab6066cec71384d0022c86906de61354f8ab438f76f824126b3b851",
+    "image": "image.png",
+    "submitted_prompt": "prompt.txt",
+    "geometry_validated": false,
+    "export_date_pacific": "2026-10-19"
+  },
+  "catalog_detail": {
+    "ranking": {
+      "planet": "CoRoT-1 b",
+      "host": "CoRoT-1",
+      "discovery_facility": "CoRoT",
+      "score": 100.0,
+      "components": {
+        "bulk_parameters": 40.0,
+        "published_spectral_data": 40,
+        "complementary_spectrum_types": 10,
+        "thermal_spectrum_available": 10
+      },
+      "score_version": "catalog-readiness-v1",
+      "tier": "spectral_followup",
+      "spectra_counts": {
+        "transmission": 6,
+        "eclipse": 9,
+        "direct_imaging": 0
+      },
+      "jwst_approved_observation_counts": {
+        "pl_nobs_jwst_tran": 0,
+        "pl_nobs_jwst_e": 0,
+        "pl_nobs_jwst_pc": 0
+      },
+      "uncredited_parameters": [],
+      "parameter_assessment": {
+        "pl_rade": {
+          "basis": "reported_with_uncertainty",
+          "points": 10.0,
+          "max_points": 10
+        },
+        "pl_bmasse": {
+          "basis": "reported_with_uncertainty",
+          "points": 8.0,
+          "max_points": 8
+        },
+        "pl_orbper": {
+          "basis": "reported_with_uncertainty",
+          "points": 4.0,
+          "max_points": 4
+        },
+        "pl_orbsmax": {
+          "basis": "reported_with_uncertainty",
+          "points": 4.0,
+          "max_points": 4
+        },
+        "pl_eqt": {
+          "basis": "reported_with_uncertainty",
+          "points": 4.0,
+          "max_points": 4
+        },
+        "st_teff": {
+          "basis": "reported_with_uncertainty",
+          "points": 6.0,
+          "max_points": 6
+        },
+        "st_rad": {
+          "basis": "reported_with_uncertainty",
+          "points": 4.0,
+          "max_points": 4
+        }
+      },
+      "unknown_spectrum_counts": [],
+      "appearance_assessed": false,
+      "rank": 1,
+      "id": "corot-1-b-993e89b894",
+      "tied_count": 79,
+      "has_curated_appearance": false
+    },
+    "brief": {
+      "planet": "CoRoT-1 b",
+      "prompt_version": "planet-portrait-v3",
+      "status": "bulk_illustration_only",
+      "limitation": "Catalog readiness proxy, not image accuracy or probability of discovery. Spectra contents, signal quality, phase curves, and visible color have not been assessed. Composite parameters may mix publications and include calculated estimates.",
+      "parameters": [
+        {
+          "field": "pl_rade",
+          "label": "Planet radius",
+          "value": 16.7,
+          "unit": "Earth radii",
+          "uncertainty_plus": 0.9,
+          "uncertainty_minus": -0.9,
+          "limit_flag": 0.0,
+          "reference": "Barge et al. 2008",
+          "source_urls": [
+            "https://ui.adsabs.harvard.edu/abs/2008A&A...482L..17B/abstract"
+          ],
+          "basis": "reported_with_uncertainty",
+          "points": 10.0,
+          "max_points": 10
+        },
+        {
+          "field": "pl_bmasse",
+          "label": "Planet mass",
+          "value": 327.35,
+          "unit": "Earth masses",
+          "uncertainty_plus": 38.14,
+          "uncertainty_minus": -38.14,
+          "limit_flag": 0.0,
+          "reference": "Barge et al. 2008",
+          "source_urls": [
+            "https://ui.adsabs.harvard.edu/abs/2008A&A...482L..17B/abstract"
+          ],
+          "basis": "reported_with_uncertainty",
+          "points": 8.0,
+          "max_points": 8
+        },
+        {
+          "field": "pl_orbper",
+          "label": "Orbital period",
+          "value": 1.5089557,
+          "unit": "days",
+          "uncertainty_plus": 6.4e-06,
+          "uncertainty_minus": -6.4e-06,
+          "limit_flag": 0.0,
+          "reference": "Barge et al. 2008",
+          "source_urls": [
+            "https://ui.adsabs.harvard.edu/abs/2008A&A...482L..17B/abstract"
+          ],
+          "basis": "reported_with_uncertainty",
+          "points": 4.0,
+          "max_points": 4
+        },
+        {
+          "field": "pl_orbsmax",
+          "label": "Orbital semi-major axis",
+          "value": 0.02752,
+          "unit": "AU",
+          "uncertainty_plus": 0.00022,
+          "uncertainty_minus": -0.00023,
+          "limit_flag": 0.0,
+          "reference": "Bonomo et al. 2017",
+          "source_urls": [
+            "https://ui.adsabs.harvard.edu/abs/2017A&A...602A.107B/abstract"
+          ],
+          "basis": "reported_with_uncertainty",
+          "points": 4.0,
+          "max_points": 4
+        },
+        {
+          "field": "pl_eqt",
+          "label": "Equilibrium temperature estimate",
+          "value": 1898.0,
+          "unit": "K",
+          "uncertainty_plus": 50.0,
+          "uncertainty_minus": -50.0,
+          "limit_flag": 0.0,
+          "reference": "Barge et al. 2008",
+          "source_urls": [
+            "https://ui.adsabs.harvard.edu/abs/2008A&A...482L..17B/abstract"
+          ],
+          "basis": "reported_with_uncertainty",
+          "points": 4.0,
+          "max_points": 4
+        },
+        {
+          "field": "st_teff",
+          "label": "Host effective temperature",
+          "value": 5950.0,
+          "unit": "K",
+          "uncertainty_plus": 150.0,
+          "uncertainty_minus": -150.0,
+          "limit_flag": 0.0,
+          "reference": "Barge et al. 2008",
+          "source_urls": [
+            "https://ui.adsabs.harvard.edu/abs/2008A&A...482L..17B/abstract"
+          ],
+          "basis": "reported_with_uncertainty",
+          "points": 6.0,
+          "max_points": 6
+        },
+        {
+          "field": "st_rad",
+          "label": "Host radius",
+          "value": 1.11,
+          "unit": "Solar radii",
+          "uncertainty_plus": 0.05,
+          "uncertainty_minus": -0.05,
+          "limit_flag": 0.0,
+          "reference": "Barge et al. 2008",
+          "source_urls": [
+            "https://ui.adsabs.harvard.edu/abs/2008A&A...482L..17B/abstract"
+          ],
+          "basis": "reported_with_uncertainty",
+          "points": 4.0,
+          "max_points": 4
+        }
+      ],
+      "mass_provenance": "Mass",
+      "appearance_evidence": null,
+      "appearance_evidence_automatically_verified": false,
+      "geometry": {
+        "distance_from_center_km": 384400,
+        "phase_angle_degrees": 60,
+        "horizontal_fov_degrees": 45.0,
+        "angular_diameter_degrees": 32.136692744989226,
+        "radius_conversion_km_per_earth_radius": 6371,
+        "radius_basis": "reported_with_uncertainty"
+      },
+      "assumptions": [
+        "Virtual camera 384400 km from planet center; this does not imply a moon or stable orbit.",
+        "Phase angle 60 degrees; 45-degree horizontal field of view; square frame.",
+        "Visible-light illustration with neutral display white balance; exact RGB is not measured.",
+        "Use a neutral-gray disk unless the supplied appearance evidence supports a different hue.",
+        "Any zoom/crop must be labeled; physical viewing distance alone does not set image scale."
+      ],
+      "unknowns": [
+        "Without additional evidence, true color is unknown; exact RGB and cloud geography remain unknown.",
+        "Surface type, continents, oceans, terrain, rings, moons and local weather patterns.",
+        "Rotation, obliquity and spatial brightness maps unless independently sourced later.",
+        "Equilibrium temperature is a model estimate, not measured surface temperature.",
+        "Spectral counts do not establish detection of an atmosphere or any molecule."
+      ],
+      "spectra_counts": {
+        "transmission": 6,
+        "eclipse": 9,
+        "direct_imaging": 0
+      },
+      "prompt": "Create an explicitly labeled, hypothetical illustration of CoRoT-1 b. This is a catalog-based scenario, not a reconstructed photograph or physical simulation. The following numerical constraints are catalog estimates; calculated values, limits, and minimum masses are not independent measurements.\n\nPlanet radius: 16.7 Earth radii; reported_with_uncertainty; uncertainties +0.9/(-0.9); limit flag 0.0. Reference: Barge et al. 2008; sources: https://ui.adsabs.harvard.edu/abs/2008A&A...482L..17B/abstract.\nPlanet mass: 327.35 Earth masses; reported_with_uncertainty; uncertainties +38.14/(-38.14); limit flag 0.0. Reference: Barge et al. 2008; sources: https://ui.adsabs.harvard.edu/abs/2008A&A...482L..17B/abstract.\nOrbital period: 1.5089557 days; reported_with_uncertainty; uncertainties +6.4e-06/(-6.4e-06); limit flag 0.0. Reference: Barge et al. 2008; sources: https://ui.adsabs.harvard.edu/abs/2008A&A...482L..17B/abstract.\nOrbital semi-major axis: 0.02752 AU; reported_with_uncertainty; uncertainties +0.00022/(-0.00023); limit flag 0.0. Reference: Bonomo et al. 2017; sources: https://ui.adsabs.harvard.edu/abs/2017A&A...602A.107B/abstract.\nEquilibrium temperature estimate: 1898.0 K; reported_with_uncertainty; uncertainties +50.0/(-50.0); limit flag 0.0. Reference: Barge et al. 2008; sources: https://ui.adsabs.harvard.edu/abs/2008A&A...482L..17B/abstract.\nHost effective temperature: 5950.0 K; reported_with_uncertainty; uncertainties +150.0/(-150.0); limit flag 0.0. Reference: Barge et al. 2008; sources: https://ui.adsabs.harvard.edu/abs/2008A&A...482L..17B/abstract.\nHost radius: 1.11 Solar radii; reported_with_uncertainty; uncertainties +0.05/(-0.05); limit flag 0.0. Reference: Barge et al. 2008; sources: https://ui.adsabs.harvard.edu/abs/2008A&A...482L..17B/abstract.\n\nRendering assumptions:\nVirtual camera 384400 km from planet center; this does not imply a moon or stable orbit.\nPhase angle 60 degrees; 45-degree horizontal field of view; square frame.\nVisible-light illustration with neutral display white balance; exact RGB is not measured.\nUse a neutral-gray disk unless the supplied appearance evidence supports a different hue.\nAny zoom/crop must be labeled; physical viewing distance alone does not set image scale.\nPlanet angular diameter: 32.1367 degrees in the stated frame.\n\nUnknowns:\nWithout additional evidence, true color is unknown; exact RGB and cloud geography remain unknown.\nSurface type, continents, oceans, terrain, rings, moons and local weather patterns.\nRotation, obliquity and spatial brightness maps unless independently sourced later.\nEquilibrium temperature is a model estimate, not measured surface temperature.\nSpectral counts do not establish detection of an atmosphere or any molecule.\n\nDo not invent detailed features as observations. Do not infer visible colors from infrared observations or a surface from equilibrium temperature. Use no rings, moons, cities, vegetation, continents, storms, or ocean textures without separately supplied evidence or an explicitly labeled scenario. Specific texture, cloud shapes, and weather must remain labeled rendering assumptions. Caption: Hypothetical illustration; detailed appearance is not observed.\n\nEvidence snapshot: 2026-10-19T03:01:59.025541+00:00. Catalog SHA-256: 27232137ec9669171b7a76243e0f2f053127fc9b358b1bf4cba7f51f44966f43.\nNASA archive: https://exoplanetarchive.ipac.caltech.edu/overview/CoRoT-1%20b\n",
+      "catalog_sha256": "27232137ec9669171b7a76243e0f2f053127fc9b358b1bf4cba7f51f44966f43",
+      "retrieved_at_utc": "2026-10-19T03:01:59.025541+00:00",
+      "archive_url": "https://exoplanetarchive.ipac.caltech.edu/overview/CoRoT-1%20b"
+    },
+    "snapshot": {
+      "retrieved_at_utc": "2026-10-19T03:01:59.025541+00:00",
+      "catalog_sha256": "27232137ec9669171b7a76243e0f2f053127fc9b358b1bf4cba7f51f44966f43",
+      "coverage": "all_confirmed_in_archive_at_retrieval",
+      "record_count": 6451,
+      "source": "https://exoplanetarchive.ipac.caltech.edu/docs/pscp_about.html",
+      "score_version": "catalog-readiness-v1",
+      "limitation": "Catalog readiness proxy, not image accuracy or probability of discovery. Spectra contents, signal quality, phase curves, and visible color have not been assessed. Composite parameters may mix publications and include calculated estimates.",
+      "with_spectra": 293,
+      "top_score": 100.0,
+      "top_tied_count": 79,
+      "facilities": [
+        "Acton Sky Portal Observatory",
+        "Anglo-Australian Telescope",
+        "Apache Point Observatory",
+        "Arecibo Observatory",
+        "Atacama Large Millimeter Array (ALMA)",
+        "Bohyunsan Optical Astronomical Observatory",
+        "CHaracterising ExOPlanets Satellite (CHEOPS)",
+        "Calar Alto Observatory",
+        "Cerro Tololo Inter-American Observatory",
+        "CoRoT",
+        "European Southern Observatory",
+        "European Space Agency (ESA) Gaia Satellite",
+        "Fred Lawrence Whipple Observatory",
+        "Gemini Observatory",
+        "HATNet",
+        "HATSouth",
+        "Haleakala Observatory",
+        "Haute-Provence Observatory",
+        "Hubble Space Telescope",
+        "Infrared Survey Facility",
+        "James Webb Space Telescope (JWST)",
+        "K2",
+        "KELT",
+        "KELT-North",
+        "KELT-South",
+        "KMTNet",
+        "KOINet",
+        "Kepler",
+        "Kitt Peak National Observatory",
+        "La Silla Observatory",
+        "Large Binocular Telescope Observatory",
+        "Las Campanas Observatory",
+        "Leoncito Astronomical Complex",
+        "Lick Observatory",
+        "Lowell Observatory",
+        "MEarth Project",
+        "MOA",
+        "Mauna Kea Observatory",
+        "McDonald Observatory",
+        "Multiple Facilities",
+        "Multiple Observatories",
+        "NASA Infrared Telescope Facility (IRTF)",
+        "Next-Generation Transit Survey (NGTS)",
+        "OGLE",
+        "Okayama Astrophysical Observatory",
+        "Palomar Observatory",
+        "Paranal Observatory",
+        "Parkes Observatory",
+        "Qatar",
+        "Roque de los Muchachos Observatory",
+        "SPECULOOS Southern Observatory",
+        "South African Radio Astronomy Observatory (SARAO)",
+        "Spitzer Space Telescope",
+        "Subaru Telescope",
+        "SuperWASP",
+        "SuperWASP-North",
+        "SuperWASP-South",
+        "Teide Observatory",
+        "The 2 (Two) Micron All Sky Survey (2MASS)",
+        "Thueringer Landessternwarte Tautenburg",
+        "TrES",
+        "Transiting Exoplanet Survey Satellite (TESS)",
+        "United Kingdom Infrared Telescope",
+        "University of Canterbury Mt John Observatory",
+        "Very Long Baseline Array",
+        "W. M. Keck Observatory",
+        "WASP-South",
+        "Wide-field Infrared Survey Explorer (WISE) Satellite Mission",
+        "Winer Observatory",
+        "XO",
+        "Xinglong Station",
+        "Yunnan Astronomical Observatory",
+        "Zwicky Transient Facility"
+      ]
+    }
+  },
+  "groups": [
+    {
+      "id": "measured",
+      "title": "Measured",
+      "description": "Published constraints and parameters fitted from observations.",
+      "claims": [
+        {
+          "title": "Planet radius",
+          "value": "16.7 (+0.9 / -0.9) Earth radii",
+          "explanation": "Reported with uncertainty.",
+          "sources": [
+            {
+              "href": "https://ui.adsabs.harvard.edu/abs/2008A&A...482L..17B/abstract",
+              "label": "Barge et al. 2008"
+            }
+          ]
+        },
+        {
+          "title": "Planet mass",
+          "value": "327.35 (+38.14 / -38.14) Earth masses",
+          "explanation": "Reported with uncertainty.",
+          "sources": [
+            {
+              "href": "https://ui.adsabs.harvard.edu/abs/2008A&A...482L..17B/abstract",
+              "label": "Barge et al. 2008"
+            }
+          ]
+        },
+        {
+          "title": "Orbital period",
+          "value": "1.5089557 (+6.4e-06 / -6.4e-06) days",
+          "explanation": "Reported with uncertainty.",
+          "sources": [
+            {
+              "href": "https://ui.adsabs.harvard.edu/abs/2008A&A...482L..17B/abstract",
+              "label": "Barge et al. 2008"
+            }
+          ]
+        },
+        {
+          "title": "Orbital semi-major axis",
+          "value": "0.02752 (+0.00022 / -0.00023) AU",
+          "explanation": "Reported with uncertainty.",
+          "sources": [
+            {
+              "href": "https://ui.adsabs.harvard.edu/abs/2017A&A...602A.107B/abstract",
+              "label": "Bonomo et al. 2017"
+            }
+          ]
+        },
+        {
+          "title": "Host effective temperature",
+          "value": "5950.0 (+150.0 / -150.0) K",
+          "explanation": "Reported with uncertainty.",
+          "sources": [
+            {
+              "href": "https://ui.adsabs.harvard.edu/abs/2008A&A...482L..17B/abstract",
+              "label": "Barge et al. 2008"
+            }
+          ]
+        },
+        {
+          "title": "Host radius",
+          "value": "1.11 (+0.05 / -0.05) Solar radii",
+          "explanation": "Reported with uncertainty.",
+          "sources": [
+            {
+              "href": "https://ui.adsabs.harvard.edu/abs/2008A&A...482L..17B/abstract",
+              "label": "Barge et al. 2008"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "inferred",
+      "title": "Inferred",
+      "description": "Model estimates and interpretations; assumptions still matter.",
+      "claims": [
+        {
+          "title": "Equilibrium temperature estimate",
+          "value": "1898.0 (+50.0 / -50.0) K",
+          "explanation": "Reported with uncertainty. Energy-balance estimate, not measured surface temperature.",
+          "sources": [
+            {
+              "href": "https://ui.adsabs.harvard.edu/abs/2008A&A...482L..17B/abstract",
+              "label": "Barge et al. 2008"
+            }
+          ]
+        },
+        {
+          "title": "Appearance has not been assessed",
+          "explanation": "Spectrum listings alone do not establish visible color or clouds. The saved prompt uses neutral gray.",
+          "sources": []
+        }
+      ]
+    },
+    {
+      "id": "illustrative",
+      "title": "Illustrative",
+      "description": "Rendering choices, not observed details.",
+      "claims": [
+        {
+          "title": "Virtual viewpoint",
+          "explanation": "Virtual camera 384400 km from planet center; this does not imply a moon or stable orbit. Phase angle 60 degrees; 45-degree horizontal field of view; square frame. Visible-light illustration with neutral display white balance; exact RGB is not measured. Use a neutral-gray disk unless the supplied appearance evidence supports a different hue. Any zoom/crop must be labeled; physical viewing distance alone does not set image scale.",
+          "sources": []
+        },
+        {
+          "title": "Unobserved detail",
+          "explanation": "Without additional evidence, true color is unknown; exact RGB and cloud geography remain unknown. Surface type, continents, oceans, terrain, rings, moons and local weather patterns. Rotation, obliquity and spatial brightness maps unless independently sourced later. Equilibrium temperature is a model estimate, not measured surface temperature. Spectral counts do not establish detection of an atmosphere or any molecule.",
+          "sources": []
+        },
+        {
+          "title": "Generated illustration",
+          "explanation": "Detailed appearance is hypothetical. Image geometry, color and photometry have not been validated; the output is not a physical simulation or a discovery.",
+          "sources": []
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Detailed appearance is hypothetical, not an observed photograph.",
+    "Fine texture, star placement and scene composition are artistic additions.",
+    "Image geometry, photometry and rendered labels have not been validated.",
+    "The saved prompt and source-linked evidence are authoritative over generated labels."
+  ]
+}
