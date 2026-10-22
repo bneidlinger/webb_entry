@@ -800,7 +800,7 @@ restarts, queue saturation and replay. No exabyte capacity extrapolation from th
   and `CLOUD_AI_REASONING_EFFORT=medium`. Older configured models keep the existing
   1,536-token budget. Standard input/output estimates per million tokens are
   $2/$10 for Sol and $4/$20 for Opus, verified against the official model pages
-  linked in [local setup](local-dev-without-docker.md#5-cloud-model-choices).
+  linked in [local setup](local-dev-without-docker.md#6-cloud-model-choices).
   Estimates do not account for cache discounts or special service tiers.
 - The model-options endpoint exposes readiness booleans only. Missing keys,
   disabled cloud generation, unavailable estimates, and missing prerequisite

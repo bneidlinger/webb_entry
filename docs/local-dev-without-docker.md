@@ -1,17 +1,69 @@
 # Local dev without Docker
 
-Use this until Docker Desktop is installed. Each service can run in its own terminal.
+Use this until Docker Desktop is installed. Each service runs in its own terminal.
+For the shortest path to the Exoplanet Portrait Atlas, follow
+[Try it on your computer](../README.md#try-it-on-your-computer) in the README; this page
+adds developer tooling, the bounded JWST sample pipeline, the worker and cloud models.
 
-## Bounded sample workflow (verified 2026-10-01)
+Commands are PowerShell. On macOS/Linux use `python3 -m venv .venv`,
+`source .venv/bin/activate`, and `.venv/bin/python` wherever this page says
+`.\.venv\Scripts\python.exe`.
 
-After installing dependencies below, leave the root Docker-oriented `.env` absent for
-native development, or override its database/Redis endpoints with localhost settings.
-SQLite and local preview storage are the defaults; no Redis, Azure, Ollama, or API key
-is needed for the sample workflow.
+## 1. API (FastAPI): install, configure, migrate, launch
+
+```powershell
+cd services\api
+# Install
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -e ".[dev]"
+# Configure: nothing required for native dev (see below)
+# Migrate: creates or updates services/api/webbwatch.db
+python -m alembic upgrade head
+# Launch
+uvicorn app.main:app --reload --port 8000
+```
+
+Then: <http://localhost:8000/health> and <http://localhost:8000/docs>.
+
+**Configuration.** Settings come from environment variables first, then `.env` files:
+the API reads `services/api/.env` and the repo-root `.env`, and the repo-root file wins
+when both set the same key. The defaults suit native development: SQLite at
+`services/api/webbwatch.db`, previews under `services/api/preview_cache/`, and Redis at
+`redis://localhost:6379/0` (only the worker and enqueue paths need Redis).
+
+The repo-root `.env.example` is the **Docker** template. Its `DATABASE_URL` and
+`REDIS_URL` use the Compose hostnames `postgres` and `redis`, so copying it unchanged
+makes native migrations fail with `failed to resolve host 'postgres'`. For native dev,
+leave the root `.env` absent, create it with only the keys you need, or override:
+
+```dotenv
+DATABASE_URL=sqlite+pysqlite:///./webbwatch.db
+REDIS_URL=redis://localhost:6379/0
+```
+
+The relative SQLite path resolves against the working directory, so run the API, CLI
+and migrations from `services/api`.
+
+## 2. Frontend (Next.js)
+
+```powershell
+cd apps\web
+npm install
+npm run dev
+```
+
+Then: <http://localhost:3000>. The health badge calls `NEXT_PUBLIC_API_BASE_URL/health`
+(default `http://localhost:8000`). Set `NEXT_PUBLIC_API_BASE_URL` before `npm run dev`
+if the API runs elsewhere, and add the web origin to the API's `CORS_ALLOWED_ORIGINS`.
+
+## 3. Bounded JWST sample workflow (verified 2026-10-01)
+
+With the API installed and migrated (section 1), no Redis, Azure, Ollama, or API key
+is needed:
 
 ```powershell
 cd services/api
-.\.venv\Scripts\python.exe -m alembic upgrade head
 # Optional: fetch a small metadata page if the catalog is empty.
 .\.venv\Scripts\python.exe -m app ingest mast --instrument NIRCAM --limit 1 --json
 # At most 3 eligible files, <=16 MiB each, <=32 MiB total download allowance.
@@ -22,10 +74,11 @@ cd ../..
 .\scripts\start-local.ps1
 ```
 
-Open <http://localhost:3000> and <http://localhost:8000/docs>. The launcher uses hidden
-processes bound to loopback and records process IDs and logs under `logs/`. It refuses
-to start if ports 3000 or 8000 are occupied. `-Sample` processes the bounded sample before
-launching. It uses the existing venv and node_modules and does not install dependencies.
+Open <http://localhost:3000> and <http://localhost:8000/docs>. The launcher applies
+migrations, then starts hidden processes bound to loopback and records process IDs and
+logs under `logs/`. It refuses to start if ports 3000 or 8000 are occupied. `-Sample`
+processes the bounded sample before launching. It uses the existing venv and
+node_modules and does not install dependencies.
 To stop a launched service, use its recorded PID with `taskkill /PID <pid> /T` so its
 child process also stops; do not terminate every Python/Node process on the machine.
 
@@ -38,33 +91,7 @@ may use more RAM than the file size; the limit is a download guard, not a RAM bo
 An observation limit bounds the metadata page, not the number of products associated
 with each observation. See HANDOFF section 13 for remaining archive-scale work.
 
-## 1. API (FastAPI)
-
-```powershell
-cd services\api
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -e ".[dev]"
-$env:DATABASE_URL = "sqlite+pysqlite:///./dev.db"   # temporary, until Postgres is up
-$env:REDIS_URL = "redis://localhost:6379/0"
-uvicorn app.main:app --reload --port 8000
-```
-
-Then: <http://localhost:8000/health>
-
-Note: the Phase-0 API does not yet talk to Postgres or Redis, so the env vars above only matter once Phase 1 ingestion lands.
-
-## 2. Frontend (Next.js)
-
-```powershell
-cd apps\web
-npm install
-npm run dev
-```
-
-Then: <http://localhost:3000> — the health badge calls `NEXT_PUBLIC_API_BASE_URL/health` (default `http://localhost:8000`).
-
-## 3. Worker (RQ)
+## 4. Worker (RQ)
 
 Needs Redis. On Windows the easiest options are:
 
@@ -82,7 +109,7 @@ pip install -e ".[dev]"
 python -m worker.run
 ```
 
-## 4. Postgres + Azurite
+## 5. Postgres + Azurite
 
 Native sample testing does not require Postgres or Azurite.
 
@@ -96,7 +123,7 @@ URLs/access before using that backend; the native sample uses API-served PNGs.
 
 To browse the emulated Blob storage, install **Azure Storage Explorer** (free Microsoft desktop app) and connect to `Local & Attached → Storage Accounts → Emulator (Azurite)`.
 
-## 5. Cloud model choices
+## 6. Cloud model choices
 
 The product page's Cloud model selector offers **GPT-6.1 Sol** (`gpt-6.1-sol`),
 **Claude Opus 5.5** (`claude-opus-5-5`), and the configured default. Summary and

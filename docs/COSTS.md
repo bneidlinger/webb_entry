@@ -68,7 +68,7 @@ automatic API retries. It records returned usage with the saved evidence. These
 controls reduce duplicate requests; there is **no app-enforced dollar spending cap**.
 `PORTRAIT_GENERATION_ENABLE=false` disables new portrait generation after an API
 restart; it does not cancel an already submitted request. Cloud report settings are
-separate. See the [generation setup](../README.md#generate-and-save-a-portrait-in-webbwatch)
+separate. See the [generation setup](../README.md#step-5-optional-generate-new-portraits)
 and [OpenAI Images API guide](https://developers.openai.com/api/docs/guides/image-generation).
 
 ## Local generation: no API fee, but real operating costs
