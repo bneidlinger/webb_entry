@@ -9,10 +9,15 @@ cd services/api
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
+python -m alembic upgrade head
 uvicorn app.main:app --reload --port 8000
 ```
 
 Then: <http://localhost:8000/health>
+
+No `.env` is needed: the database defaults to `services/api/webbwatch.db` (SQLite).
+Don't copy the repo-root `.env.example` for native runs; it targets Docker's Postgres.
+See [`docs/local-dev-without-docker.md`](../../docs/local-dev-without-docker.md).
 
 ## Run via Docker
 
